@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autocomplete Search - Inventory</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .search-box {
+            margin-bottom: 20px;
+            position: relative;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+        .autocomplete-item {
+            padding: 12px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .autocomplete-item:hover {
+            background-color: #f5f5f5;
+        }
+        .autocomplete-item.selected {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        /* Popular Styles Section */
+        .popular-styles-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+        .popular-styles-title {
+            color: #333;
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .popular-styles-container {
+            display: flex;
+            overflow-x: auto;
+            gap: 15px;
+            padding: 10px 0;
+            scroll-behavior: smooth;
+        }
+        .popular-styles-container::-webkit-scrollbar {
+            height: 8px;
+        }
+        .popular-styles-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .popular-styles-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        .popular-styles-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .style-item {
+            flex: 0 0 auto;
+            width: 150px;
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            text-align: center;
+        }
+        .style-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .style-image {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+            margin-bottom: 8px;
+        }
+        .style-placeholder {
+            width: 100%;
+            height: 120px;
+            background: linear-gradient(135deg, #f0f0f0, #e0e0e0);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+        .style-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .style-sales {
+            font-size: 12px;
+            color: #666;
+            background: #e8f5e8;
+            padding: 2px 6px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            margin: 20px 0;
+        }
+        .results {
+            margin-top: 30px;
+        }
+        .match-info {
+            background-color: #e8f5e8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4CAF50;
+        }
+        .inventory-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .inventory-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            background: white;
+            transition: box-shadow 0.3s;
+        }
+        .inventory-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .item-image-container {
+            flex-shrink: 0;
+            margin-right: 20px;
+        }
+        .item-image {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        .item-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 8px;
+        }
+        .item-details {
+            width: 100%;
+        }
+        .item-name {
+            font-size: 14px;
+            font-weight: 400;
+            color: #666;
+            margin-bottom: 8px;
+            text-transform: none;
+        }
+        .item-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+        }
+        .item-qty-price {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .item-qty {
+            font-size: 16px;
+            color: #666;
+            font-weight: 500;
+        }
+        .item-price {
+            font-size: 20px;
+            color: #333;
+            font-weight: 600;
+        }
+        .cart-button {
+            background-color: #FFD700;
+            color: #333;
+            border: 2px solid #FFD700;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .cart-button:hover {
+            background-color: #FFC107;
+        }
+        .cart-button.active {
+            background-color: white;
+            color: #333;
+            border: 2px solid #FFD700;
+        }
+        .quantity-controls-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .qty-btn-inline {
+            background-color: transparent;
+            border: none;
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 2px;
+            transition: background-color 0.2s;
+        }
+        .qty-btn-inline:hover {
+            background-color: rgba(0,0,0,0.1);
+        }
+        .qty-btn-inline:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        .qty-display-inline {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+            min-width: 20px;
+            text-align: center;
+        }
+        .bin-icon {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+        .no-results {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        .error {
+            background-color: #ffe6e6;
+            color: #d32f2f;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">        
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Type to search modelos..." autocomplete="off" />
+            <div id="autocompleteDropdown" class="autocomplete-dropdown"></div>
+            
+            <button onclick="performSearch()" id="searchButton" style="background-color: #FFD700; color: #333;">Buscar</button>
+        </div>
+        
+        <!-- Popular Styles Section -->
+        <div class="popular-styles-section">
+            <h2 class="popular-styles-title">🔥 Estilos Más Populares</h2>
+            <div id="popularStylesContainer" class="popular-styles-container">
+                <!-- Popular styles will be loaded here -->
+            </div>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            Searching... Please wait
+        </div>
+        
+        <div id="results" class="results"></div>
+    </div>
+
+    <script>
+        let allModelos = [];
+        let selectedModeloIndex = -1;
+        let filteredModelos = [];
+        let itemQuantities = {};
+        
+        // Load all modelos on page load
+        async function loadModelos() {
+            try {
+                const response = await fetch('/api/modelos');
+                const data = await response.json();
+                allModelos = data.modelos;
+            } catch (error) {
+                console.error('Error loading modelos:', error);
+            }
+        }
+        
+        // Load popular styles
+        async function loadPopularStyles() {
+            try {
+                const response = await fetch('/api/popular-styles');
+                const data = await response.json();
+                displayPopularStyles(data.popular_styles);
+            } catch (error) {
+                console.error('Error loading popular styles:', error);
+                // Hide the popular styles section if there's an error
+                document.querySelector('.popular-styles-section').style.display = 'none';
+            }
+        }
+        
+        function displayPopularStyles(styles) {
+            const container = document.getElementById('popularStylesContainer');
+            
+            if (!styles || styles.length === 0) {
+                document.querySelector('.popular-styles-section').style.display = 'none';
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            styles.forEach(style => {
+                const styleElement = document.createElement('div');
+                styleElement.className = 'style-item';
+                styleElement.onclick = () => searchByStyle(style.estilo);
+                
+                const imageHtml = style.public_url_webp ? 
+                    `<img src="${style.public_url_webp}" alt="${style.estilo}" class="style-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                     <div class="style-placeholder" style="display: none;">No Image</div>` :
+                    `<div class="style-placeholder">No Image</div>`;
+                
+                styleElement.innerHTML = `
+                    ${imageHtml}
+                    <div class="style-name" title="${style.estilo}">${style.estilo}</div>
+                    <div class="style-sales">${style.total_qty} sold</div>
+                `;
+                
+                container.appendChild(styleElement);
+            });
+        }
+        
+        function searchByStyle(estilo) {
+            // Set the search input to the style name and perform search
+            document.getElementById('searchInput').value = estilo;
+            performSearch();
+        }
+        
+        async function logSearchActivity(searchTerm, successful, resultsCount) {
+            try {
+                await fetch('/api/log-search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        search_term: searchTerm,
+                        search_successful: successful,
+                        results_count: resultsCount
+                    })
+                });
+            } catch (error) {
+                console.log('Failed to log search activity:', error);
+                // Don't show error to user - logging is background functionality
+            }
+        }
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadModelos();
+            loadPopularStyles();
+        });
+        
+        // Search input event listeners
+        const searchInput = document.getElementById('searchInput');
+        const dropdown = document.getElementById('autocompleteDropdown');
+        
+        searchInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            if (query.length === 0) {
+                hideDropdown();
+                return;
+            }
+            
+            // Filter modelos
+            filteredModelos = allModelos.filter(modelo => 
+                modelo.toLowerCase().includes(query.toLowerCase())
+            );
+            
+            showDropdown(filteredModelos);
+            selectedModeloIndex = -1;
+        });
+        
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedModeloIndex = Math.min(selectedModeloIndex + 1, filteredModelos.length - 1);
+                updateSelection();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedModeloIndex = Math.max(selectedModeloIndex - 1, -1);
+                updateSelection();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (selectedModeloIndex >= 0) {
+                    selectModelo(filteredModelos[selectedModeloIndex]);
+                } else {
+                    performSearch();
+                }
+            } else if (e.key === 'Escape') {
+                hideDropdown();
+            }
+        });
+        
+        // Click outside to close dropdown
+        document.addEventListener('click', function(e) {
+            if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                hideDropdown();
+            }
+        });
+        
+        function showDropdown(modelos) {
+            if (modelos.length === 0) {
+                hideDropdown();
+                return;
+            }
+            
+            dropdown.innerHTML = '';
+            modelos.slice(0, 10).forEach((modelo, index) => {
+                const item = document.createElement('div');
+                item.className = 'autocomplete-item';
+                item.textContent = modelo;
+                item.addEventListener('click', () => selectModelo(modelo));
+                dropdown.appendChild(item);
+            });
+            
+            dropdown.style.display = 'block';
+        }
+        
+        function hideDropdown() {
+            dropdown.style.display = 'none';
+            selectedModeloIndex = -1;
+        }
+        
+        function updateSelection() {
+            const items = dropdown.querySelectorAll('.autocomplete-item');
+            items.forEach((item, index) => {
+                if (index === selectedModeloIndex) {
+                    item.classList.add('selected');
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+        }
+        
+        function selectModelo(modelo) {
+            searchInput.value = modelo;
+            hideDropdown();
+            performSearch();
+        }
+        
+        async function performSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const searchButton = document.getElementById('searchButton');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            
+            const modelo = searchInput.value.trim();
+            
+            if (!modelo) {
+                alert('Please select a modelo');
+                return;
+            }
+            
+            // Reset quantities when performing new search
+            itemQuantities = {};
+            
+            // Show loading state
+            searchButton.disabled = true;
+            loading.style.display = 'block';
+            results.innerHTML = '';
+            
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        modelo: modelo
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Search failed');
+                }
+                
+                displayResults(data);
+                
+                // Store search results globally for cart operations
+                window.currentSearchResults = data;
+                
+                // Log search activity
+                logSearchActivity(modelo, data.total_inventory_items > 0, data.total_inventory_items);
+                
+            } catch (error) {
+                results.innerHTML = `
+                    <div class="error">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+                
+                // Log unsuccessful search
+                logSearchActivity(modelo, false, 0);
+            } finally {
+                // Hide loading state
+                searchButton.disabled = false;
+                loading.style.display = 'none';
+            }
+        }
+        
+        function displayResults(data) {
+            const results = document.getElementById('results');
+            
+            if (data.total_inventory_items === 0) {
+                results.innerHTML = `
+                    <div class="no-results">
+                        <h3>No inventory items found</h3>
+                        <p>No items found for modelo "${data.modelo}" with terex1 >= 1</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = `
+                <div class="match-info">
+                    <h3>✅ Found: ${data.modelo}</h3>
+                    <p><strong>Inventory Items Found:</strong> ${data.total_inventory_items}</p>
+                </div>
+            `;
+            
+            if (data.inventory_items.length > 0) {
+                html += `<div class="inventory-container">`;
+                
+                data.inventory_items.forEach((item, index) => {
+                    const itemName = item.name || 'N/A';
+                    const itemId = `item_${index}`;
+                    const precio = item.precio ? `${item.precio}` : 'N/A';
+                    
+                    // Initialize quantity for this item if not exists
+                    if (!itemQuantities[itemId]) {
+                        itemQuantities[itemId] = 1;
+                    }
+                    
+                    html += `
+                        <div class="inventory-item">
+                            <div class="item-image-container">
+                    `;
+                    
+                    if (item.public_url_webp) {
+                        html += `<img src="${item.public_url_webp}" alt="Item image" class="item-image">`;
+                    } else {
+                        html += `<div class="item-image" style="background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; color: #999;">No image</div>`;
+                    }
+                    
+                    html += `
+                            </div>
+                            <div class="item-content">
+                                <div class="item-name">${itemName}</div>
+                                <div class="item-qty-price">
+                                    <div class="item-qty">${item.terex1} in stock</div>
+                                    <div class="item-price">${precio}</div>
+                                </div>
+                                <button class="cart-button" id="btn_${itemId}" onclick="addToCart('${itemId}', '${itemName}', ${item.terex1}, '${item.public_url_webp || ''}', ${item.precio || 0})">
+                                    Add to Cart
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+            }
+            
+            results.innerHTML = html;
+        }
+        
+        function addToCart(itemId, itemName, maxStock, imageUrl, precio) {
+            const button = document.getElementById(`btn_${itemId}`);
+            
+            // Initialize quantity
+            itemQuantities[itemId] = 1;
+            
+            // Change button to show quantity controls
+            button.classList.add('active');
+            
+            // Replace button content with quantity controls
+            if (itemQuantities[itemId] === 1) {
+                // Show bin icon instead of minus when quantity is 1
+                button.innerHTML = `
+                    <div class="quantity-controls-inline">
+                        <div class="qty-btn-inline" onclick="event.stopPropagation(); removeFromCart('${itemId}')">
+                            <svg class="bin-icon" viewBox="0 0 24 24">
+                                <path d="M6 7H5V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1h-1V6a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1z"/>
+                                <path d="M19 7H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zM7 19a1 1 0 0 1-1-1V9h2v10H7zm4 0H9V9h2v10zm4 0h-2V9h2v10zm2-1a1 1 0 0 1-1 1V9h2v9z"/>
+                            </svg>
+                        </div>
+                        <span class="qty-display-inline">${itemQuantities[itemId]}</span>
+                        <button class="qty-btn-inline" onclick="event.stopPropagation(); incrementQuantity('${itemId}', ${maxStock})">+</button>
+                    </div>
+                `;
+            }
+            
+            // Send to database
+            sendCartToDatabase(itemId, itemName, itemQuantities[itemId], precio, maxStock, imageUrl, 'add');
+        }
+        
+        function removeFromCart(itemId) {
+            const button = document.getElementById(`btn_${itemId}`);
+            
+            // Get item name for database removal
+            const itemName = getItemNameFromId(itemId);
+            
+            // Reset button to original state
+            button.classList.remove('active');
+            button.innerHTML = 'Add to Cart';
+            
+            // Send removal to database
+            sendCartToDatabase(itemId, itemName, 0, 0, 0, '', 'remove');
+            
+            // Reset quantity
+            delete itemQuantities[itemId];
+        }
+        
+        function incrementQuantity(itemId, maxStock) {
+            if (itemQuantities[itemId] < maxStock) {
+                itemQuantities[itemId]++;
+                updateButtonDisplay(itemId, maxStock);
+                
+                // Update database
+                const itemName = getItemNameFromId(itemId);
+                sendCartToDatabase(itemId, itemName, itemQuantities[itemId], 0, maxStock, '', 'update');
+            }
+        }
+        
+        function decrementQuantity(itemId, maxStock) {
+            if (itemQuantities[itemId] > 1) {
+                itemQuantities[itemId]--;
+                updateButtonDisplay(itemId, maxStock);
+                
+                // Update database
+                const itemName = getItemNameFromId(itemId);
+                sendCartToDatabase(itemId, itemName, itemQuantities[itemId], 0, maxStock, '', 'update');
+            }
+        }
+        
+        function getItemNameFromId(itemId) {
+            // Extract item name from the DOM or store it globally
+            const itemIndex = itemId.replace('item_', '');
+            const inventoryItems = window.currentSearchResults?.inventory_items || [];
+            if (inventoryItems[itemIndex]) {
+                return inventoryItems[itemIndex].name || 'Unknown Item';
+            }
+            return 'Unknown Item';
+        }
+        
+        async function sendCartToDatabase(itemId, itemName, qty, precio, maxStock, imageUrl, action) {
+            try {
+                const inventoryItems = window.currentSearchResults?.inventory_items || [];
+                const itemIndex = parseInt(itemId.replace('item_', ''));
+                const item = inventoryItems[itemIndex];
+                
+                if (action === 'add') {
+                    const response = await fetch('/api/cart/add', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            item_name: itemName,
+                            qty: qty,
+                            barcode: null,
+                            precio: precio,
+                            modelo: window.currentSearchResults?.modelo || null,
+                            estilo_id: item?.estilo_id || null,
+                            color_id: item?.color_id || null,
+                            terex1: maxStock,
+                            public_url_webp: imageUrl
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (!result.success) {
+                        console.error('Failed to add to cart:', result);
+                    }
+                } else if (action === 'update') {
+                    const response = await fetch('/api/cart/update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            item_name: itemName,
+                            new_qty: qty
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (!result.success) {
+                        console.error('Failed to update cart:', result);
+                    }
+                } else if (action === 'remove') {
+                    const response = await fetch('/api/cart/remove', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            item_name: itemName
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (!result.success) {
+                        console.error('Failed to remove from cart:', result);
+                    }
+                }
+            } catch (error) {
+                console.error('Error sending cart data to database:', error);
+            }
+        }
+        
+        function updateButtonDisplay(itemId, maxStock) {
+            const button = document.getElementById(`btn_${itemId}`);
+            const quantity = itemQuantities[itemId];
+            
+            if (quantity === 1) {
+                // Show bin icon instead of minus when quantity is 1
+                button.innerHTML = `
+                    <div class="quantity-controls-inline">
+                        <div class="qty-btn-inline" onclick="event.stopPropagation(); removeFromCart('${itemId}')">
+                            <svg class="bin-icon" viewBox="0 0 24 24">
+                                <path d="M6 7H5V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1h-1V6a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1z"/>
+                                <path d="M19 7H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zM7 19a1 1 0 0 1-1-1V9h2v10H7zm4 0H9V9h2v10zm4 0h-2V9h2v10zm2-1a1 1 0 0 1-1 1V9h2v9z"/>
+                            </svg>
+                        </div>
+                        <span class="qty-display-inline">${quantity}</span>
+                        <button class="qty-btn-inline" onclick="event.stopPropagation(); incrementQuantity('${itemId}', ${maxStock})" ${quantity >= maxStock ? 'disabled' : ''}>+</button>
+                    </div>
+                `;
+            } else {
+                // Show normal minus button when quantity > 1
+                button.innerHTML = `
+                    <div class="quantity-controls-inline">
+                        <button class="qty-btn-inline" onclick="event.stopPropagation(); decrementQuantity('${itemId}', ${maxStock})">−</button>
+                        <span class="qty-display-inline">${quantity}</span>
+                        <button class="qty-btn-inline" onclick="event.stopPropagation(); incrementQuantity('${itemId}', ${maxStock})" ${quantity >= maxStock ? 'disabled' : ''}>+</button>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
