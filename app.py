@@ -208,7 +208,7 @@ async def get_popular_styles():
     """Get popular styles from the last 30 days with their images"""
     try:
         # Execute the SQL query to get popular styles
-        popular_styles_result = supabase.rpc("get_popular_styles_with_images_17").execute()
+        popular_styles_result = supabase.rpc("get_popular_styles_with_images_17", {}).execute()
         
         # If the RPC doesn't exist, use a direct query approach
         if not popular_styles_result.data:
