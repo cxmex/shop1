@@ -33,6 +33,8 @@ class InventoryItem(BaseModel):
     terex1: int
     precio: Optional[int] = None
     public_url_webp: Optional[str] = None
+    estilo_id: Optional[int] = None
+    color_id: Optional[int] = None
 
 class SearchResult(BaseModel):
     modelo: str
@@ -41,6 +43,9 @@ class SearchResult(BaseModel):
 
 class SearchRequest(BaseModel):
     modelo: str
+
+class StyleSearchRequest(BaseModel):
+    estilo: str
 
 class CartItemRequest(BaseModel):
     item_name: str
@@ -66,6 +71,13 @@ class PopularStyle(BaseModel):
     total_qty: int
     public_url_webp: Optional[str] = None
 
+class ImageModel(BaseModel):
+    id: str  # Changed from int to str to handle UUID
+    public_url_webp: str
+    estilo_id: int
+    color_id: int
+    created_at: Optional[str] = None
+
 # Utility Functions
 def generate_session_id(request: Request) -> str:
     """Generate a unique session ID based on IP and user agent"""
@@ -83,7 +95,7 @@ async def get_or_create_session(request: Request) -> str:
     ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
     
-    # Try to find existing session based on IP and user agent from recent activity
+    # Try to find existing session based on IP and user agent from recent activity (today)
     existing_session = supabase.table("shop_user_cart_sessions").select("session_id").eq("ip_address", ip).eq("user_agent", user_agent).gte("last_activity", datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()).limit(1).execute()
     
     if existing_session.data:
@@ -205,62 +217,36 @@ async def get_modelos():
 
 @app.get("/api/popular-styles")
 async def get_popular_styles():
-    """Get popular styles from the last 30 days with their images"""
+    """Get popular styles from inventario_estilos where prioridad = 1"""
     try:
-        # Execute the SQL query to get popular styles
-        popular_styles_result = supabase.rpc("get_popular_styles_with_images_17", {}).execute()
+        # Get all estilos with prioridad = 1
+        estilos_result = supabase.table("inventario_estilos").select("id, nombre").eq("prioridad", 1).execute()
         
-        # If the RPC doesn't exist, use a direct query approach
-        if not popular_styles_result.data:
-            # Fallback to direct table queries
-            # Get popular styles from ventas_terex1, excluding saldos
-            ventas_result = supabase.table("ventas_terex1").select("estilo_id, estilo, qty").gte("fecha", (datetime.utcnow().replace(day=datetime.utcnow().day-30)).isoformat()).execute()
+        if not estilos_result.data:
+            return {"popular_styles": []}
+        
+        popular_styles = []
+        
+        for estilo_data in estilos_result.data:
+            estilo_id = estilo_data.get("id")
+            estilo_name = estilo_data.get("nombre")  # Changed from name to nombre
             
-            # Group by estilo_id and sum quantities, excluding saldos
-            style_totals = {}
-            for venta in ventas_result.data:
-                estilo_id = venta.get("estilo_id")
-                estilo = venta.get("estilo")
-                qty = venta.get("qty", 0)
-                
-                # Skip if estilo contains "saldos" (case insensitive)
-                if estilo and "saldos" in estilo.lower():
-                    continue
-                
-                if estilo_id:
-                    if estilo_id not in style_totals:
-                        style_totals[estilo_id] = {"estilo": estilo, "total_qty": 0}
-                    style_totals[estilo_id]["total_qty"] += qty
+            # Get image for this style
+            image_result = supabase.table("image_uploads").select("public_url_webp").eq("estilo_id", estilo_id).limit(1).execute()
             
-            # Sort by total quantity and get top 17
-            sorted_styles = sorted(style_totals.items(), key=lambda x: x[1]["total_qty"], reverse=True)[:17]
+            image_url = None
+            if image_result.data:
+                image_url = image_result.data[0]["public_url_webp"]
             
-            # Get images for these styles
-            popular_styles = []
-            for estilo_id, style_data in sorted_styles:
-                # Get image for this style
-                image_result = supabase.table("image_uploads").select("public_url_webp").eq("estilo_id", estilo_id).limit(1).execute()
-                
-                image_url = None
-                if image_result.data:
-                    image_url = image_result.data[0]["public_url_webp"]
-                
-                popular_styles.append(PopularStyle(
-                    estilo_id=estilo_id,
-                    estilo=style_data["estilo"],
-                    total_qty=style_data["total_qty"],
-                    public_url_webp=image_url
-                ))
-        else:
-            # Use RPC result if available
-            popular_styles = [
-                PopularStyle(
-                    estilo_id=item["estilo_id"],
-                    estilo=item["estilo"],
-                    total_qty=item["total_qty"],
-                    public_url_webp=item.get("public_url_webp")
-                ) for item in popular_styles_result.data
-            ]
+            popular_styles.append(PopularStyle(
+                estilo_id=estilo_id,
+                estilo=estilo_name,  # Using nombre as estilo
+                total_qty=1,  # Just a placeholder since we're not counting sales
+                public_url_webp=image_url
+            ))
+        
+        # Sort by estilo name (you can change this)
+        popular_styles.sort(key=lambda x: x.estilo)
         
         return {"popular_styles": popular_styles}
         
@@ -268,6 +254,39 @@ async def get_popular_styles():
         print(f"Error fetching popular styles: {e}")
         # Return empty list if there's an error
         return {"popular_styles": []}
+
+@app.get("/api/images/{estilo_id}/{color_id}")
+async def get_images_for_product(estilo_id: int, color_id: int):
+    """Get all images for a specific estilo_id and color_id combination"""
+    try:
+        # Fetch all images for this estilo and color combination
+        images_result = supabase.table("image_uploads").select("id, public_url_webp, estilo_id, color_id, created_at").eq("estilo_id", estilo_id).eq("color_id", color_id).order("created_at", desc=False).execute()
+        
+        if not images_result.data:
+            return {"success": False, "message": "No images found for this product", "images": []}
+        
+        # Convert to ImageModel objects
+        images = [
+            ImageModel(
+                id=img["id"],
+                public_url_webp=img["public_url_webp"],
+                estilo_id=img["estilo_id"],
+                color_id=img["color_id"],
+                created_at=img.get("created_at")
+            ) for img in images_result.data if img.get("public_url_webp")
+        ]
+        
+        return {
+            "success": True, 
+            "images": images,
+            "total_images": len(images),
+            "estilo_id": estilo_id,
+            "color_id": color_id
+        }
+        
+    except Exception as e:
+        print(f"Error fetching images for estilo_id={estilo_id}, color_id={color_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error fetching images: {str(e)}")
 
 @app.post("/api/log-search")
 async def log_search(request: Request, search_data: dict):
@@ -306,7 +325,9 @@ async def search_inventory(request: SearchRequest):
         inventory_item = InventoryItem(
             name=item.get("name"),
             terex1=item.get("terex1", 0),
-            precio=item.get("precio")
+            precio=item.get("precio"),
+            estilo_id=item.get("estilo_id"),
+            color_id=item.get("color_id")
         )
         
         # Always try to get image if IDs are available
@@ -323,6 +344,48 @@ async def search_inventory(request: SearchRequest):
         inventory_items=processed_items,
         total_inventory_items=len(processed_items)
     )
+
+@app.post("/search-style", response_model=SearchResult)
+async def search_inventory_by_style(request: StyleSearchRequest):
+    """Search for inventory items by exact estilo match with terex1 > 0"""
+    
+    estilo = request.estilo.strip()
+    if not estilo:
+        raise HTTPException(status_code=400, detail="Estilo cannot be empty")
+    
+    # Get inventory items for the estilo where terex1 > 0
+    inventory_records = supabase.table("inventario1").select("name, terex1, precio, estilo_id, color_id, estilo").eq("estilo", estilo).gt("terex1", 0).execute()
+    
+    # Process inventory items and always add images
+    processed_items = []
+    for item in inventory_records.data:
+        # Ensure we're getting the precio value correctly
+        precio_value = item.get("precio")
+        print(f"Processing style item: {item.get('name')}, precio: {precio_value}, type: {type(precio_value)}")
+        
+        inventory_item = InventoryItem(
+            name=item.get("name"),
+            terex1=item.get("terex1", 0),
+            precio=item.get("precio"),
+            estilo_id=item.get("estilo_id"),
+            color_id=item.get("color_id")
+        )
+        
+        # Always try to get image if IDs are available
+        if item.get("estilo_id") and item.get("color_id"):
+            image_result = supabase.table("image_uploads").select("public_url_webp").eq("estilo_id", item["estilo_id"]).eq("color_id", item["color_id"]).limit(1).execute()
+            if image_result.data:
+                inventory_item.public_url_webp = image_result.data[0]["public_url_webp"]
+        
+        print(f"Created style inventory_item with precio: {inventory_item.precio}")
+        processed_items.append(inventory_item)
+    
+    return SearchResult(
+        modelo=estilo,  # Using modelo field to display the searched estilo
+        inventory_items=processed_items,
+        total_inventory_items=len(processed_items)
+    )
+
 
 # Cart API Endpoints
 @app.post("/api/cart/add")
