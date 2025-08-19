@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 from typing import List, Dict, Optional
@@ -7,7 +8,9 @@ from pydantic import BaseModel
 import uuid
 import hashlib
 import json
+import os
 from datetime import datetime
+from pathlib import Path
 
 # Configuration
 SUPABASE_URL = "https://gbkhkbfbarsnpbdkxzii.supabase.co"
@@ -26,6 +29,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Create static directory if it doesn't exist
+static_dir = Path("static")
+static_dir.mkdir(exist_ok=True)
+
+# Mount static files directory
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Pydantic Models
 class InventoryItem(BaseModel):
@@ -199,11 +209,72 @@ async def add_to_cart(request: Request, item: CartItemRequest):
 async def get_homepage():
     """Serve the HTML interface"""
     try:
-        with open("index.html", "r", encoding="utf-8") as file:
-            html_content = file.read()
+        # Try to find index.html in current directory first, then in templates folder
+        html_file_paths = ["index.html", "templates/index.html", "static/index.html"]
+        
+        html_content = None
+        for file_path in html_file_paths:
+            if os.path.exists(file_path):
+                with open(file_path, "r", encoding="utf-8") as file:
+                    html_content = file.read()
+                break
+        
+        if html_content is None:
+            # Return a simple HTML page with instructions if no index.html is found
+            html_content = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Inventory Search</title>
+                <style>
+                    body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+                    .error { color: #d32f2f; background: #ffebee; padding: 20px; border-radius: 5px; }
+                    .instructions { background: #e8f5e9; padding: 20px; border-radius: 5px; margin-top: 20px; }
+                    code { background: #f5f5f5; padding: 2px 5px; border-radius: 3px; }
+                </style>
+            </head>
+            <body>
+                <h1>Inventory Search API</h1>
+                <div class="error">
+                    <h3>⚠️ index.html file not found</h3>
+                    <p>Please create an <code>index.html</code> file in your project directory.</p>
+                </div>
+                <div class="instructions">
+                    <h3>📁 Recommended File Structure:</h3>
+                    <pre>
+your-project/
+├── main.py              (this FastAPI file)
+├── index.html           (your main HTML file)
+└── static/
+    ├── styles.css       (your CSS file)
+    └── script.js        (your JavaScript file)
+                    </pre>
+                    <p><strong>Note:</strong> Make sure your HTML file references CSS and JS as:</p>
+                    <ul>
+                        <li><code>&lt;link rel="stylesheet" href="/static/styles.css"&gt;</code></li>
+                        <li><code>&lt;script src="/static/script.js"&gt;&lt;/script&gt;</code></li>
+                    </ul>
+                </div>
+                <p><strong>API Documentation:</strong> <a href="/docs">http://localhost:8000/docs</a></p>
+            </body>
+            </html>
+            """
+            
         return HTMLResponse(content=html_content)
-    except FileNotFoundError:
-        return HTMLResponse(content="<h1>Error: index.html file not found</h1>", status_code=404)
+        
+    except Exception as e:
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>Error</title></head>
+        <body>
+            <h1>Error loading page</h1>
+            <p>Error: {str(e)}</p>
+            <p><a href="/docs">Visit API Documentation</a></p>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=500)
 
 @app.get("/api/modelos")
 async def get_modelos():
@@ -488,6 +559,17 @@ async def get_search_analytics(request: Request):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching search analytics: {str(e)}")
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "static_files_mounted": "/static",
+        "docs_available": "/docs"
+    }
 
 if __name__ == "__main__":
     import uvicorn  
