@@ -1267,6 +1267,40 @@ async def dashboard_auth(payload: GoogleAuthRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+async def ensure_user_barcode(email: str):
+    """Ensure user has a barcode, create if missing"""
+    try:
+        # Check if user already has a barcode
+        existing_barcode = supabase.table("user_barcodes").select("barcode").eq("user_email", email).eq("status", "active").limit(1).execute()
+        
+        if existing_barcode.data:
+            return existing_barcode.data[0]["barcode"]
+        
+        # Create new barcode if none exists
+        user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
+        
+        if not user_check.data:
+            return None
+        
+        user_id = user_check.data[0]["id"]
+        new_barcode = generate_user_barcode(email)
+        
+        barcode_data = {
+            "user_id": user_id,
+            "user_email": email,
+            "barcode": new_barcode,
+            "status": "active",
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        supabase.table("user_barcodes").insert(barcode_data).execute()
+        return new_barcode
+        
+    except Exception as e:
+        print(f"Error ensuring user barcode: {e}")
+        return None
+
 if __name__ == "__main__":
     import uvicorn  
     uvicorn.run(app, host="0.0.0.0", port=8000)
