@@ -10,7 +10,7 @@ body {
     background-color: #ffffff;
     color: #8D99A0;
     line-height: 1.6;
-    padding-top: 120px;
+    padding-top: 140px; /* Increased to prevent overlap */
 }
 
 /* Header Styles */
@@ -22,7 +22,8 @@ body {
     background: white;
     border-bottom: 1px solid #C5C7D2;
     z-index: 1000;
-    padding: 10px 0;
+    padding: 15px 0; /* Increased padding */
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1); /* Added shadow for better separation */
 }
 
 .header-content {
@@ -32,6 +33,20 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 0 20px;
+}
+
+.company-logo {
+    cursor: pointer;
+}
+
+.company-logo img {
+    height: 80px; /* Reduced from original to prevent overflow */
+    width: auto;
+    transition: transform 0.3s ease;
+}
+
+.company-logo:hover img {
+    transform: scale(1.05);
 }
 
 .company-logo h1 {
@@ -48,23 +63,52 @@ body {
     font-family: 'Montserrat', sans-serif;
 }
 
-/* Cart Header Styles */
-.cart-header {
+/* Account and Cart Container */
+.account-cart-container {
     position: fixed;
-    top: 70px;
+    top: 20px;
     right: 20px;
+    display: flex;
+    gap: 10px;
+    z-index: 1001;
+}
+
+/* Account Header Styles */
+.account-header {
     background: #0CB5D6;
     color: white;
     padding: 10px 20px;
     border-radius: 43px;
     box-shadow: 0 1px 7px 2px rgba(0,0,0,0.16);
-    z-index: 1001;
     cursor: pointer;
     transition: all 0.3s;
     font-weight: 600;
     min-width: 120px;
     text-align: center;
     border: 2px solid #0792AD;
+    font-size: 14px;
+}
+
+.account-header:hover {
+    background: #09B2D2;
+    transform: translateY(2px);
+    box-shadow: 0 6px 15px 2px rgba(0,0,0,0.24);
+}
+
+/* Cart Header Styles */
+.cart-header {
+    background: #0CB5D6;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 43px;
+    box-shadow: 0 1px 7px 2px rgba(0,0,0,0.16);
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 600;
+    min-width: 120px;
+    text-align: center;
+    border: 2px solid #0792AD;
+    font-size: 14px;
 }
 
 .cart-header:hover {
@@ -132,10 +176,15 @@ body {
 .search-box {
     position: relative;
     margin-bottom: 20px;
+    max-width: 600px;
+    margin: 0 auto 20px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
 }
 
 input[type="text"] {
-    width: 100%;
+    flex: 1;
     padding: 20px;
     font-size: 16px;
     border: 2px solid #ddd;
@@ -151,19 +200,18 @@ input[type="text"]:focus {
 }
 
 .search-btn {
-    width: 100%;
     background-color: #0CB5D6;
     color: white;
     border: 2px solid #0792AD;
     border-radius: 43px;
-    padding: 20px 70px;
+    padding: 20px 30px;
     font-size: 18px;
     font-weight: bold;
     cursor: pointer;
     transition: all 0.3s;
     box-shadow: 0 1px 7px 2px rgba(0,0,0,0.16);
     font-family: 'Montserrat', sans-serif;
-    margin-top: 20px;
+    white-space: nowrap;
 }
 
 .search-btn:hover {
@@ -184,7 +232,7 @@ input[type="text"]:focus {
     position: absolute;
     top: 100%;
     left: 0;
-    right: 0;
+    right: 140px; /* Account for search button width */
     background: white;
     border: 1px solid #ddd;
     border-top: none;
@@ -834,10 +882,22 @@ input[type="text"]:focus {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    body {
+        padding-top: 200px; /* Increased for mobile */
+    }
+
+    .header {
+        padding: 10px 0;
+    }
+    
     .header-content {
         flex-direction: column;
-        gap: 10px;
+        gap: 15px;
         text-align: center;
+    }
+    
+    .company-logo img {
+        height: 60px; /* Smaller on mobile */
     }
     
     .company-logo h1 {
@@ -848,15 +908,17 @@ input[type="text"]:focus {
         font-size: 13px;
     }
     
-    .cart-header {
-        top: 120px;
-        right: 10px;
-        padding: 8px 15px;
-        font-size: 14px;
+    .account-cart-container {
+        position: static;
+        justify-content: center;
+        margin: 10px 0;
+        order: 3; /* Move to bottom in header */
     }
     
-    body {
-        padding-top: 180px;
+    .account-header, .cart-header {
+        padding: 8px 15px;
+        font-size: 14px;
+        min-width: 100px;
     }
     
     .container {
@@ -870,10 +932,20 @@ input[type="text"]:focus {
     .main-description {
         font-size: 14px;
     }
+
+    .search-box {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .autocomplete-dropdown {
+        right: 0; /* Full width on mobile */
+    }
     
     .search-btn {
         padding: 15px 50px;
         font-size: 16px;
+        width: 100%;
     }
     
     .section-title {

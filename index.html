@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Search - Product Catalog</title>
+    <title>Busqueda de Inventario</title>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Lato:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/styles.css">
 </head>
@@ -11,15 +11,23 @@
     <!-- Header -->
     <header class="header">
         <div class="header-content">
-            <div class="company-logo">
-                <h1>COMPANY LOGO</h1>
+            <div class="account-cart-container">
+
+            <div class="company-logo" onclick="window.location.href='https://teresalocal352.com/'" style="cursor: pointer;">
+                <img src="https://teresalocal352.com/logoteresa.png" alt="Teresa Local 352" style="height: 160px; width: auto;">
             </div>
             <div class="help-contact">
-                NEED HELP? CALL 800-555-1212
+                Telefono 56 4302 1025
             </div>
+        </div>
         </div>
     </header>
 
+    <!-- Account Header -->
+    <div class="cart-header account-header" onclick="window.location.href='dashboard.html'" style="right: 160px;">
+        Mi Cuenta
+    </div>
+    
     <!-- Cart Header -->
     <div class="cart-header" id="cartHeader" onclick="toggleCartModal()">
         🛒 Cart <span class="cart-count hidden" id="cartCount">0</span>
@@ -29,16 +37,15 @@
     <main class="main-content">
         <div class="container">
             <div class="hero-section">
-                <h1 class="main-title"><strong>PRODUCT SEARCH</strong></h1>
+                <h1 class="main-title"><strong>BUSQUEDA</strong></h1>
                 <p class="main-description">
-                    Find the perfect products from our extensive inventory. 
-                    Search by model or browse our most popular styles.
+                    Encuentra la funda para tu modelo de celular
                 </p>
             </div>
             
             <div class="search-section">
                 <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="Type to search modelos..." autocomplete="off" />
+                    <input type="text" id="searchInput" placeholder="Escribe el modelo..." autocomplete="off" />
                     <div id="autocompleteDropdown" class="autocomplete-dropdown"></div>
                     <button onclick="performSearch()" id="searchButton" class="search-btn">
                         <span class="btn-text">BUSCAR</span>
@@ -57,7 +64,7 @@
             <!-- Loading State -->
             <div id="loading" class="loading-state" style="display: none;">
                 <div class="loading-spinner"></div>
-                <p>Searching... Please wait</p>
+                <p>Buscando .... Espera</p>
             </div>
             
             <!-- Results Section -->
@@ -67,7 +74,7 @@
 
     <!-- Free Shipping Banner -->
     <div class="shipping-banner">
-        <p>FREE SHIPPING AND RETURNS ON ALL ORDERS!</p>
+        <p>DESCUENTO EN VOLUMEN!</p>
     </div>
 
     <!-- Cart Modal -->
@@ -90,11 +97,11 @@
     <div class="image-carousel-modal" id="imageCarouselModal">
         <div class="carousel-content">
             <div class="carousel-header">
-                <div class="carousel-title" id="carouselTitle">Product Images</div>
+                <div class="carousel-title" id="carouselTitle">Imagenes de Producto</div>
                 <button class="carousel-close-btn" onclick="closeCarousel()">&times;</button>
             </div>
             <div class="carousel-container" id="carouselContainer">
-                <div class="carousel-loading" id="carouselLoading">Loading images...</div>
+                <div class="carousel-loading" id="carouselLoading">Cargando Imagenes...</div>
                 <img class="carousel-image" id="carouselImage" style="display: none;" alt="Product image">
                 <button class="carousel-nav-btn carousel-prev" id="carouselPrev" onclick="previousImage()" style="display: none;">‹</button>
                 <button class="carousel-nav-btn carousel-next" id="carouselNext" onclick="nextImage()" style="display: none;">›</button>
@@ -112,17 +119,27 @@
     <footer class="footer">
         <div class="footer-content">
             <div class="footer-logo">
-                <h3>COMPANY LOGO</h3>
+                <h3>FUNDA STOCK</h3>
             </div>
             <div class="footer-text">
-                <p>© 2024 Copyright. CompanyName</p>
+                <p>© 2024 Copyright. FUNDA STOCK</p>
             </div>
         </div>
         <div class="security-info">
-            <p>Your data is 100% secure and private.</p>
+            <p>Tus datos son 100% seguros y privados.</p>
         </div>
     </footer>
 
     <script src="/static/script.js"></script>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-M80W7EZDEM"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-M80W7EZDEM');
+    </script>
+        
 </body>
 </html>
