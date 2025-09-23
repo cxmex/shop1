@@ -28,8 +28,7 @@ templates = Jinja2Templates(directory="templates")
 
 # Configuration
 SUPABASE_URL = "https://gbkhkbfbarsnpbdkxzii.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdia2hrYmZiYXJzbnBiZGt4emlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQzODAzNzMsImV4cCI6MjA0OTk1NjM3M30.mcOcC2GVEu_wD3xNBzSCC3MwDck3CIdmz4D8adU-bpI"
-
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdia2hrYmZiYXJzbnBiZGt4emlpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNDM4MDM3MywiZXhwIjoyMDQ5OTU2MzczfQ.9Z2wL4_MZLutuymgACb9aAdGnsm95ho3WJsO9rFY4VI"
 # Initialize clients
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -1297,22 +1296,24 @@ async def dashboard_auth(payload: GoogleAuthRequest):
 async def ensure_user_barcode(email: str):
     """Ensure user has a barcode, create if missing, link existing ones to user account"""
     try:
-        # First, check if there's ANY barcode for this email (user_id can be NULL or set)
+        print(f"DEBUG: Checking barcode for email: {email}")
+        
+        # First, check if there's ANY barcode for this email
         existing_barcode = supabase.table("user_barcodes").select("*").eq("user_email", email).eq("status", "active").limit(1).execute()
         
         if existing_barcode.data:
             barcode_record = existing_barcode.data[0]
+            print(f"DEBUG: Found existing barcode for {email}")
             
             # If barcode exists but has no user_id, link it to the user account
             if barcode_record.get("user_id") is None:
-                # Get the user_id for this email
                 user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
                 
                 if user_check.data:
                     user_id = user_check.data[0]["id"]
                     
                     # Update the barcode to link it to the user account
-                    supabase.table("user_barcodes").update({
+                    update_result = supabase.table("user_barcodes").update({
                         "user_id": user_id,
                         "updated_at": datetime.utcnow().isoformat()
                     }).eq("id", barcode_record["id"]).execute()
@@ -1320,6 +1321,8 @@ async def ensure_user_barcode(email: str):
                     print(f"DEBUG: Linked existing barcode to user account for {email}")
             
             return barcode_record["barcode"]
+        
+        print(f"DEBUG: No existing barcode found, creating new one for {email}")
         
         # No barcode exists, create a new one
         user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
@@ -1340,65 +1343,22 @@ async def ensure_user_barcode(email: str):
             "updated_at": datetime.utcnow().isoformat()
         }
         
+        print(f"DEBUG: Attempting to insert barcode data: {barcode_data}")
+        
+        # Don't swallow errors - let them bubble up so we can see what's wrong
         result = supabase.table("user_barcodes").insert(barcode_data).execute()
-        print(f"DEBUG: Created new barcode for {email}: {new_barcode}")
+        
+        if not result.data:
+            raise Exception("Insert returned no data - possible RLS issue")
+        
+        print(f"DEBUG: Successfully created barcode for {email}: {new_barcode}")
         return new_barcode
         
     except Exception as e:
-        print(f"Error ensuring user barcode for {email}: {e}")
-        return None
-
-
-
-async def ensure_user_barcode(email: str):
-    """Ensure user has a barcode, create if missing, link existing ones to user account"""
-    try:
-        existing_barcode = supabase.table("user_barcodes").select("*").eq("user_email", email).eq("status", "active").limit(1).execute()
-        
-        if existing_barcode.data:
-            barcode_record = existing_barcode.data[0]
-            
-            if barcode_record.get("user_id") is None:
-                user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
-                
-                if user_check.data:
-                    user_id = user_check.data[0]["id"]
-                    
-                    supabase.table("user_barcodes").update({
-                        "user_id": user_id,
-                        "updated_at": datetime.utcnow().isoformat()
-                    }).eq("id", barcode_record["id"]).execute()
-                    
-                    print(f"DEBUG: Linked existing barcode to user account for {email}")
-            
-            return barcode_record["barcode"]
-        
-        user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
-        
-        if not user_check.data:
-            print(f"DEBUG: No user found for email {email}")
-            return None
-        
-        user_id = user_check.data[0]["id"]
-        new_barcode = generate_user_barcode(email)
-        
-        barcode_data = {
-            "user_id": user_id,
-            "user_email": email,
-            "barcode": new_barcode,
-            "status": "active",
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }
-        
-        supabase.table("user_barcodes").insert(barcode_data).execute()
-        print(f"DEBUG: Created new barcode for {email}: {new_barcode}")
-        return new_barcode
-        
-    except Exception as e:
-        print(f"Error ensuring user barcode for {email}: {e}")
-        return None
-
+        # Don't swallow the error - show exactly what went wrong
+        print(f"ERROR: Failed to ensure barcode for {email}: {str(e)}")
+        print(f"ERROR: Exception type: {type(e)}")
+        raise e  # Re-raise so we can see the actual error
 
 if __name__ == "__main__":
     import uvicorn  
