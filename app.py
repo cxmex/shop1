@@ -1144,24 +1144,51 @@ async def redeem_with_barcode(request: RedeemBarcodeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing barcode redemption: {str(e)}")
 
+
 @app.get("/api/user/barcode/{email}")
 async def get_user_barcode(email: str):
-    """Get user's barcode by email"""
+    """Get user's barcode by email - handles both linked and unlinked barcodes"""
     try:
-        barcode_result = supabase.table("user_barcodes").select("barcode, created_at, updated_at").eq("user_email", email).eq("status", "active").limit(1).execute()
+        # Look for ANY barcode for this email, regardless of user_id
+        barcode_result = supabase.table("user_barcodes").select("barcode, created_at, updated_at, user_id").eq("user_email", email).eq("status", "active").limit(1).execute()
         
         if not barcode_result.data:
             return {"success": False, "message": "No barcode found for user"}
         
+        barcode_data = barcode_result.data[0]
+        
+        # If the user is accessing via dashboard and barcode has no user_id, link it
+        if barcode_data.get("user_id") is None:
+            try:
+                # Try to link the barcode to the user account
+                user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
+                
+                if user_check.data:
+                    user_id = user_check.data[0]["id"]
+                    
+                    # Update the barcode to link it to the user account
+                    supabase.table("user_barcodes").update({
+                        "user_id": user_id,
+                        "updated_at": datetime.utcnow().isoformat()
+                    }).eq("user_email", email).eq("barcode", barcode_data["barcode"]).execute()
+                    
+                    print(f"DEBUG: Auto-linked barcode to user account for {email}")
+            except Exception as link_error:
+                print(f"DEBUG: Failed to auto-link barcode: {link_error}")
+                # Continue anyway, barcode still works
+        
         return {
             "success": True,
-            "barcode": barcode_result.data[0]["barcode"],
-            "created_at": barcode_result.data[0]["created_at"],
-            "updated_at": barcode_result.data[0]["updated_at"]
+            "barcode": barcode_data["barcode"],
+            "created_at": barcode_data["created_at"],
+            "updated_at": barcode_data["updated_at"]
         }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching user barcode: {str(e)}")
+
+
+
 
 @app.get("/api/barcode/redemption-history/{email}")
 async def get_barcode_redemption_history(email: str):
@@ -1268,7 +1295,91 @@ async def dashboard_auth(payload: GoogleAuthRequest):
 
 
 async def ensure_user_barcode(email: str):
-    """Ensure user has a barcode, create if missing"""
+    """Ensure user has a barcode, create if missing, link existing ones to user account"""
+    try:
+        # First, check if there's ANY barcode for this email (user_id can be NULL or set)
+        existing_barcode = supabase.table("user_barcodes").select("*").eq("user_email", email).eq("status", "active").limit(1).execute()
+        
+        if existing_barcode.data:
+            barcode_record = existing_barcode.data[0]
+            
+            # If barcode exists but has no user_id, link it to the user account
+            if barcode_record.get("user_id") is None:
+                # Get the user_id for this email
+                user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
+                
+                if user_check.data:
+                    user_id = user_check.data[0]["id"]
+                    
+                    # Update the barcode to link it to the user account
+                    supabase.table("user_barcodes").update({
+                        "user_id": user_id,
+                        "updated_at": datetime.utcnow().isoformat()
+                    }).eq("id", barcode_record["id"]).execute()
+                    
+                    print(f"DEBUG: Linked existing barcode to user account for {email}")
+            
+            return barcode_record["barcode"]
+        
+        # No barcode exists, create a new one
+        user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
+        
+        if not user_check.data:
+            print(f"DEBUG: No user found for email {email}")
+            return None
+        
+        user_id = user_check.data[0]["id"]
+        new_barcode = generate_user_barcode(email)
+        
+        barcode_data = {
+            "user_id": user_id,
+            "user_email": email,
+            "barcode": new_barcode,
+            "status": "active",
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        result = supabase.table("user_barcodes").insert(barcode_data).execute()
+        print(f"DEBUG: Created new barcode for {email}: {new_barcode}")
+        return new_barcode
+        
+    except Exception as e:
+        print(f"Error ensuring user barcode for {email}: {e}")
+        return None
+
+# Also add this new function to handle barcode creation for simple redemptions:
+
+async def ensure_barcode_for_email(email: str):
+    """Ensure an email has a barcode, create if missing (for simple redemptions without user accounts)"""
+    try:
+        # Check if email already has a barcode (any barcode, regardless of user_id)
+        existing_barcode = supabase.table("user_barcodes").select("barcode").eq("user_email", email).eq("status", "active").limit(1).execute()
+        
+        if existing_barcode.data:
+            print(f"DEBUG: Barcode already exists for email {email}")
+            return existing_barcode.data[0]["barcode"]
+        
+        # Generate new barcode for this email
+        new_barcode = generate_user_barcode(email)
+        
+        # Create barcode entry without user_id (since this is for simple redemption)
+        barcode_data = {
+            "user_id": None,  # No user account for simple redemptions
+            "user_email": email,
+            "barcode": new_barcode,
+            "status": "active",
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        result = supabase.table("user_barcodes").insert(barcode_data).execute()
+        print(f"DEBUG: Created barcode for email {email}: {new_barcode}")
+        return new_barcode
+        
+    except Exception as e:
+        print(f"Error ensuring barcode for email {email}: {e}")
+        raise e    """Ensure user has a barcode, create if missing"""
     try:
         # Check if user already has a barcode
         existing_barcode = supabase.table("user_barcodes").select("barcode").eq("user_email", email).eq("status", "active").limit(1).execute()
