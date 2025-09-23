@@ -274,7 +274,7 @@
                  data-client_id="617408497340-ud30tuhg633pbssdlfgm35chhuiggq24.apps.googleusercontent.com"
                  data-context="signin"
                  data-ux_mode="popup"
-                 data-callback="handleDashboardLogin"
+                 data-callback="handleCredentialResponse"
                  data-auto_prompt="false">
             </div>
             
@@ -358,34 +358,40 @@
     </div>
 
     <script>
+        // API Base URL Configuration - EXACTLY like redeem.html
+        const API_BASE_URL = 'https://shop1-production.up.railway.app';
+        
+        console.log('Dashboard using API Base URL:', API_BASE_URL);
+
         let currentUser = null;
         let userBarcode = null;
 
         // Check for existing session on page load
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('Dashboard page loaded, checking for existing session...');
             const sessionToken = localStorage.getItem('session_token');
             
             if (sessionToken) {
-                // Try to load dashboard with existing session
+                console.log('Found existing session token, loading dashboard...');
                 loadDashboard(sessionToken);
             } else {
-                // Show login section
+                console.log('No session token found, showing login...');
                 document.getElementById('login-section').style.display = 'block';
             }
         });
 
-        // Google Sign-In callback for dashboard
-        function handleDashboardLogin(response) {
-            console.log("Dashboard login successful");
+        // Google Sign-In callback - SAME AS redeem.html
+        function handleCredentialResponse(response) {
+            console.log("Dashboard Google authentication successful");
+            showLoading();
             authenticateForDashboard(response.credential);
         }
 
         async function authenticateForDashboard(googleToken) {
             try {
-                document.getElementById('login-section').style.display = 'none';
-                document.getElementById('loading').style.display = 'block';
+                console.log('Starting dashboard authentication...');
 
-                const response = await fetch('/api/auth/dashboard', {
+                const response = await fetch(`${API_BASE_URL}/api/auth/dashboard`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -396,11 +402,14 @@
                 });
 
                 const data = await response.json();
+                console.log('Dashboard auth response:', response.status, data);
 
                 if (response.ok) {
                     // Store session token
-                    localStorage.setItem('session_token', data.session_token);
-                    console.log('Dashboard session created');
+                    if (data.session_token) {
+                        localStorage.setItem('session_token', data.session_token);
+                        console.log('Session token saved:', data.session_token.substring(0, 16) + '...');
+                    }
                     
                     // Load dashboard
                     loadDashboard(data.session_token);
@@ -417,10 +426,13 @@
 
         async function loadDashboard(sessionToken) {
             try {
+                console.log('Loading dashboard with session token...');
                 document.getElementById('loading').style.display = 'block';
                 
-                const response = await fetch(`/api/user/dashboard?session_token=${sessionToken}`);
+                const response = await fetch(`${API_BASE_URL}/api/user/dashboard?session_token=${sessionToken}`);
                 const data = await response.json();
+
+                console.log('Dashboard data response:', response.status, data);
 
                 if (!response.ok) {
                     // Session expired or invalid
@@ -438,6 +450,8 @@
                 document.getElementById('header').style.display = 'block';
                 document.getElementById('dashboard-content').style.display = 'block';
                 document.getElementById('logout-btn').style.display = 'block';
+
+                console.log('Dashboard loaded successfully');
 
             } catch (error) {
                 console.error('Error loading dashboard:', error);
@@ -482,10 +496,13 @@
 
         async function generateUserBarcode(email) {
             try {
-                const response = await fetch(`/api/user/barcode/${encodeURIComponent(email)}`);
+                console.log('Generating barcode for user:', email);
+                const response = await fetch(`${API_BASE_URL}/api/user/barcode/${encodeURIComponent(email)}`);
                 
                 if (response.ok) {
                     const result = await response.json();
+                    console.log('Barcode response:', result);
+                    
                     if (result.success && result.barcode) {
                         const barcodeNumber = result.barcode;
                         
@@ -503,6 +520,7 @@
                                 lineColor: "#000000",
                                 margin: 10
                             });
+                            console.log('Barcode visual generated successfully');
                         } catch (error) {
                             console.error('Error generating barcode visual:', error);
                         }
@@ -513,6 +531,7 @@
                         showError('No tienes un código de barras aún. Se creará automáticamente cuando tengas recompensas.');
                     }
                 } else {
+                    console.error('Error fetching barcode:', response.status);
                     document.getElementById('barcode-number').textContent = 'Error al cargar';
                     showError('No se pudo obtener tu código de barras.');
                 }
@@ -546,6 +565,12 @@
             location.reload();
         }
 
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('login-section').style.display = 'none';
+            document.getElementById('error-message').style.display = 'none';
+        }
+
         function showError(message) {
             document.getElementById('error-text').textContent = message;
             document.getElementById('error-message').style.display = 'block';
@@ -566,6 +591,22 @@
                 successDiv.remove();
             }, 3000);
         }
+
+        // Error handling for Google Sign-In - SAME AS redeem.html
+        window.addEventListener('error', function(event) {
+            if (event.message && event.message.includes('origin_mismatch')) {
+                console.error('Google OAuth origin mismatch detected');
+                showError('Error de configuración OAuth. Contacta al administrador.');
+            }
+        });
+
+        // Additional error handling
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            if (event.reason && event.reason.toString().includes('origin_mismatch')) {
+                showError('Error de configuración OAuth. Contacta al administrador.');
+            }
+        });
     </script>
 </body>
 </html>
