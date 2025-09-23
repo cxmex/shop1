@@ -262,9 +262,23 @@
             background: rgba(244, 67, 54, 1);
             transform: translateY(-2px);
         }
+
+        .env-indicator {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(76, 175, 80, 0.9);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
+    <div class="env-indicator">🔧 LOCALHOST</div>
+    
     <div class="container">
         <div id="login-section" class="login-section">
             <h1>Panel de Recompensas</h1>
@@ -358,8 +372,8 @@
     </div>
 
     <script>
-        // API Base URL Configuration - EXACTLY like redeem.html
-        const API_BASE_URL = 'https://shop1-production.up.railway.app';
+        // API Base URL Configuration - CHANGED TO LOCALHOST
+        const API_BASE_URL = 'http://localhost:8000';
         
         console.log('Dashboard using API Base URL:', API_BASE_URL);
 
@@ -380,7 +394,7 @@
             }
         });
 
-        // Google Sign-In callback - SAME AS redeem.html
+        // Google Sign-In callback
         function handleCredentialResponse(response) {
             console.log("Dashboard Google authentication successful");
             showLoading();
@@ -527,26 +541,83 @@
                         
                         console.log('Barcode retrieved from database:', barcodeNumber);
                     } else {
-                        document.getElementById('barcode-number').textContent = 'Código no disponible';
-                        showError('No tienes un código de barras aún. Se creará automáticamente cuando tengas recompensas.');
+                        // If no barcode exists, try to create one
+                        console.log('No barcode found, attempting to create one...');
+                        await createUserBarcode(email);
                     }
                 } else {
                     console.error('Error fetching barcode:', response.status);
-                    document.getElementById('barcode-number').textContent = 'Error al cargar';
-                    showError('No se pudo obtener tu código de barras.');
+                    // If fetch fails, try to create one
+                    console.log('Fetch failed, attempting to create barcode...');
+                    await createUserBarcode(email);
                 }
                 
             } catch (error) {
                 console.error('Error getting barcode from database:', error);
-                document.getElementById('barcode-number').textContent = 'Error al cargar';
-                showError('Error al obtener el código de barras.');
+                // If there's an error, try to create one
+                console.log('Error occurred, attempting to create barcode...');
+                await createUserBarcode(email);
+            }
+        }
+
+        async function createUserBarcode(email) {
+            try {
+                console.log('Creating new barcode for user:', email);
+                
+                // Try a different approach - call the backend function directly
+                const createResponse = await fetch(`${API_BASE_URL}/api/user/create-barcode`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: email
+                    })
+                });
+
+                const responseData = await createResponse.json();
+                console.log('Create barcode response:', createResponse.status, responseData);
+
+                if (createResponse.ok && responseData.success) {
+                    const finalBarcode = responseData.barcode;
+                    
+                    // Update UI with new barcode
+                    userBarcode = finalBarcode;
+                    document.getElementById('barcode-number').textContent = finalBarcode;
+
+                    // Generate the barcode visual
+                    try {
+                        JsBarcode("#barcode-canvas", finalBarcode, {
+                            format: "CODE128",
+                            width: 2,
+                            height: 100,
+                            displayValue: false,
+                            background: "#ffffff",
+                            lineColor: "#000000",
+                            margin: 10
+                        });
+                        
+                        showSuccess('Código de barras creado exitosamente');
+                        console.log('New barcode created and displayed:', finalBarcode);
+                    } catch (barcodeError) {
+                        console.error('Error generating barcode visual:', barcodeError);
+                    }
+                } else {
+                    console.error('Failed to create barcode:', responseData);
+                    throw new Error(responseData.message || 'Failed to create barcode');
+                }
+                
+            } catch (error) {
+                console.error('Error creating barcode:', error);
+                document.getElementById('barcode-number').textContent = 'Error al crear código';
+                showError(`No se pudo crear el código de barras: ${error.message}`);
             }
         }
 
         function regenerateBarcode() {
             if (currentUser && currentUser.email) {
-                generateUserBarcode(currentUser.email);
-                showSuccess('Código de barras actualizado');
+                // Force creation of a new barcode
+                createUserBarcode(currentUser.email);
             }
         }
 
@@ -592,7 +663,7 @@
             }, 3000);
         }
 
-        // Error handling for Google Sign-In - SAME AS redeem.html
+        // Error handling for Google Sign-In
         window.addEventListener('error', function(event) {
             if (event.message && event.message.includes('origin_mismatch')) {
                 console.error('Google OAuth origin mismatch detected');

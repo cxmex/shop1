@@ -12,6 +12,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 import secrets
+import random
 from datetime import timedelta
 import requests
 from fastapi.templating import Jinja2Templates
@@ -51,6 +52,10 @@ static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Pydantic Models
+
+class CreateBarcodeRequest(BaseModel):
+    email: str
+
 
 class GoogleAuthRequest(BaseModel):
     google_token: str
@@ -132,6 +137,7 @@ class BarcodeRedemptionResponse(BaseModel):
     redeemed_amount: float
     remaining_balance: float
     user_email: str
+
 
 
 
@@ -1144,48 +1150,6 @@ async def redeem_with_barcode(request: RedeemBarcodeRequest):
         raise HTTPException(status_code=500, detail=f"Error processing barcode redemption: {str(e)}")
 
 
-@app.get("/api/user/barcode/{email}")
-async def get_user_barcode(email: str):
-    """Get user's barcode by email - handles both linked and unlinked barcodes"""
-    try:
-        # Look for ANY barcode for this email, regardless of user_id
-        barcode_result = supabase.table("user_barcodes").select("barcode, created_at, updated_at, user_id").eq("user_email", email).eq("status", "active").limit(1).execute()
-        
-        if not barcode_result.data:
-            return {"success": False, "message": "No barcode found for user"}
-        
-        barcode_data = barcode_result.data[0]
-        
-        # If the user is accessing via dashboard and barcode has no user_id, link it
-        if barcode_data.get("user_id") is None:
-            try:
-                # Try to link the barcode to the user account
-                user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
-                
-                if user_check.data:
-                    user_id = user_check.data[0]["id"]
-                    
-                    # Update the barcode to link it to the user account
-                    supabase.table("user_barcodes").update({
-                        "user_id": user_id,
-                        "updated_at": datetime.utcnow().isoformat()
-                    }).eq("user_email", email).eq("barcode", barcode_data["barcode"]).execute()
-                    
-                    print(f"DEBUG: Auto-linked barcode to user account for {email}")
-            except Exception as link_error:
-                print(f"DEBUG: Failed to auto-link barcode: {link_error}")
-                # Continue anyway, barcode still works
-        
-        return {
-            "success": True,
-            "barcode": barcode_data["barcode"],
-            "created_at": barcode_data["created_at"],
-            "updated_at": barcode_data["updated_at"]
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching user barcode: {str(e)}")
-
 
 
 
@@ -1204,56 +1168,237 @@ async def get_barcode_redemption_history(email: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching redemption history: {str(e)}")
 
-# Add this utility function to generate consistent barcodes
-def generate_user_barcode(email: str, timestamp: str = None) -> str:
-    """Generate a consistent barcode for a user based on email"""
-    if timestamp is None:
-        timestamp = str(datetime.utcnow().timestamp())
-    
-    # Create hash from email and timestamp
-    hash_input = f"{email}_{timestamp}"
-    hash_object = hashlib.md5(hash_input.encode())
-    hash_hex = hash_object.hexdigest()
-    
-    # Extract digits and ensure we have enough
-    digits = ''.join(filter(str.isdigit, hash_hex))
-    if len(digits) < 9:
-        # Pad with hash characters converted to numbers
-        for char in hash_hex:
-            if not char.isdigit():
-                digits += str(ord(char) % 10)
-            if len(digits) >= 9:
-                break
-    
-    # Take first 9 digits and create EAN-13 format: 7000 + 9 digits
-    barcode_number = f"7000{digits[:9]}"
-    
-    # Calculate EAN-13 check digit
-    check_digit = calculate_ean13_check_digit(barcode_number)
-    
-    return f"{barcode_number}{check_digit}"
 
-def calculate_ean13_check_digit(barcode: str) -> int:
-    """Calculate EAN-13 check digit"""
-    odd_sum = sum(int(barcode[i]) for i in range(0, len(barcode), 2))
-    even_sum = sum(int(barcode[i]) for i in range(1, len(barcode), 2))
+
+# First, add these helper functions at the top of your file after the imports:
+async def supabase_request(method: str, endpoint: str, params: dict = None, data: dict = None):
+    """Make a direct Supabase REST API request"""
+    url = f"{SUPABASE_URL}{endpoint}"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    if method == "GET":
+        response = requests.get(url, headers=headers, params=params)
+    elif method == "POST":
+        response = requests.post(url, headers=headers, json=data)
+    elif method == "PATCH":
+        response = requests.patch(url, headers=headers, json=data)
+    
+    if response.status_code >= 400:
+        raise Exception(f"Supabase request failed: {response.status_code} - {response.text}")
+    
+    return response.json()
+
+def _ean13_check_digit_for_partial12(partial: str) -> int:
+    """Calculate EAN-13 check digit for 12-digit partial barcode"""
+    odd_sum = sum(int(partial[i]) for i in range(0, len(partial), 2))
+    even_sum = sum(int(partial[i]) for i in range(1, len(partial), 2))
     total = odd_sum + (even_sum * 3)
     return (10 - (total % 10)) % 10
+
+def _build_barcode_from_eight(eight_digits: str) -> str:
+    """Build 13-digit code: 8000 + eight + EAN-13 check digit"""
+    partial = f"8000{eight_digits}"  # 12 digits
+    return f"{partial}{_ean13_check_digit_for_partial12(partial)}"
+
+
+async def ensure_user_barcode(email: str):
+    """Ensure user has a barcode, create if missing. Returns (barcode, was_existing)"""
+    try:
+        email = _normalize_email(email)
+        print(f"DEBUG: ensure_user_barcode for email: {email}")
+        
+        # Check if barcode already exists
+        existing_barcode = await supabase_request(
+            method="GET",
+            endpoint="/rest/v1/user_barcodes",
+            params={
+                "select": "barcode,user_id",
+                "user_email": f"eq.{email}",
+                "status": "eq.active",
+                "limit": "1"
+            }
+        )
+        
+        if existing_barcode:
+            barcode_record = existing_barcode[0]
+            print(f"DEBUG: Found existing barcode for {email}: {barcode_record['barcode']}")
+            
+            # If barcode exists but has no user_id, try to link it
+            if not barcode_record.get("user_id"):
+                try:
+                    user_check = await supabase_request(
+                        method="GET",
+                        endpoint="/rest/v1/users",
+                        params={
+                            "select": "id",
+                            "email": f"eq.{email}",
+                            "limit": "1"
+                        }
+                    )
+                    
+                    if user_check:
+                        user_id = user_check[0]["id"]
+                        await supabase_request(
+                            method="PATCH",
+                            endpoint="/rest/v1/user_barcodes",
+                            params={"user_email": f"eq.{email}"},
+                            json_data={
+                                "user_id": user_id,
+                                "updated_at": datetime.utcnow().isoformat()
+                            }
+                        )
+                        print(f"DEBUG: Linked existing barcode to user account for {email}")
+                except Exception as link_error:
+                    print(f"DEBUG: Failed to link barcode: {link_error}")
+            
+            return barcode_record["barcode"], True
+        
+        print(f"DEBUG: No existing barcode found, creating new one for {email}")
+        
+        # Generate 8 random digits for the barcode (using your working pattern)
+        eight_digits = ''.join([str(random.randint(0, 9)) for _ in range(8)])
+        new_barcode = _build_barcode_from_eight(eight_digits)
+        
+        print(f"DEBUG: Generated barcode: {new_barcode}")
+        
+        # Check if user exists, create if not
+        user_check = await supabase_request(
+            method="GET",
+            endpoint="/rest/v1/users",
+            params={
+                "select": "id",
+                "email": f"eq.{email}",
+                "limit": "1"
+            }
+        )
+        
+        user_id = None
+        if user_check:
+            user_id = user_check[0]["id"]
+            print(f"DEBUG: Found existing user with id: {user_id}")
+        else:
+            # Create basic user record
+            print(f"DEBUG: Creating user record for {email}")
+            user_data = {
+                "email": email,
+                "name": email.split('@')[0],
+                "created_at": datetime.utcnow().isoformat()
+            }
+            created_user = await supabase_request(
+                method="POST",
+                endpoint="/rest/v1/users",
+                json_data=user_data
+            )
+            if created_user:
+                user_id = created_user[0]["id"]
+                print(f"DEBUG: Created new user with id: {user_id}")
+        
+        # Create barcode entry
+        barcode_data = {
+            "user_id": user_id,
+            "user_email": email,
+            "barcode": new_barcode,
+            "status": "active",
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        print(f"DEBUG: Creating barcode entry: {barcode_data}")
+        
+        result = await supabase_request(
+            method="POST",
+            endpoint="/rest/v1/user_barcodes",
+            json_data=barcode_data
+        )
+        
+        if not result:
+            raise Exception("Barcode creation failed - no data returned")
+        
+        print(f"DEBUG: Successfully created barcode for {email}: {new_barcode}")
+        return new_barcode, False
+        
+    except Exception as e:
+        print(f"ERROR: Failed to ensure barcode for {email}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise e
+
+
+@app.post("/api/user/create-barcode")
+async def create_user_barcode_endpoint(request: CreateBarcodeRequest):
+    """Create a barcode for a user - working endpoint"""
+    try:
+        email = request.email.strip().lower()
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
+        
+        print(f"DEBUG: API create-barcode called for email: {email}")
+        
+        # Use the working ensure_user_barcode function
+        barcode, was_existing = await ensure_user_barcode(email)
+        
+        message = "Existing barcode retrieved" if was_existing else "Barcode created successfully"
+        
+        print(f"DEBUG: Returning success response: {barcode}")
+        
+        return {
+            "success": True,
+            "barcode": barcode,
+            "message": message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Failed to create barcode in endpoint: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/barcode/{email}")
+async def get_user_barcode(email: str):
+    """Get user's barcode by email - working endpoint"""
+    try:
+        email = email.strip().lower()
+        print(f"DEBUG: API get-barcode called for email: {email}")
+        
+        # Use the working ensure_user_barcode function
+        barcode, was_existing = await ensure_user_barcode(email)
+        
+        return {
+            "success": True,
+            "barcode": barcode,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"ERROR: Failed to get barcode for {email}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "message": f"Error: {str(e)}"}
+
+def _normalize_email(email: str) -> str:
+    """Normalize email to lowercase and strip whitespace"""
+    return (email or "").strip().lower()
 
 
 @app.post("/api/auth/dashboard")
 async def dashboard_auth(payload: GoogleAuthRequest):
-    """Authenticate user with Google for dashboard access (no redemption required)"""
+    """Authenticate user with Google for dashboard access"""
     try:
         print(f"DEBUG: Dashboard auth request received", flush=True)
         
         # Verify Google token
-        print(f"DEBUG: Verifying Google token", flush=True)
         user_info = await verify_google_token(payload.google_token)
         print(f"DEBUG: Google token verified for {user_info.get('email')}", flush=True)
         
         # Create or get user
-        print(f"DEBUG: Creating/getting user", flush=True)
         user = await create_or_get_user(user_info)
         print(f"DEBUG: User created/retrieved: {user.get('email')}", flush=True)
         
@@ -1269,8 +1414,8 @@ async def dashboard_auth(payload: GoogleAuthRequest):
         
         # Ensure user has a barcode (create if missing)
         try:
-            await ensure_user_barcode(user["email"])
-            print(f"DEBUG: Barcode ensured for user", flush=True)
+            barcode, was_existing = await ensure_user_barcode(user["email"])
+            print(f"DEBUG: Barcode ensured for user: {barcode} (existing: {was_existing})", flush=True)
         except Exception as barcode_error:
             print(f"DEBUG: Barcode creation failed: {barcode_error}", flush=True)
             # Continue anyway - barcode creation failure shouldn't block dashboard access
@@ -1293,72 +1438,34 @@ async def dashboard_auth(payload: GoogleAuthRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-async def ensure_user_barcode(email: str):
-    """Ensure user has a barcode, create if missing, link existing ones to user account"""
+async def supabase_request(method: str, endpoint: str, params: dict = None, json_data: dict = None):
+    """Make a direct Supabase REST API request"""
+    url = f"{SUPABASE_URL}{endpoint}"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
+    
     try:
-        print(f"DEBUG: Checking barcode for email: {email}")
+        if method == "GET":
+            response = requests.get(url, headers=headers, params=params)
+        elif method == "POST":
+            response = requests.post(url, headers=headers, json=json_data)
+        elif method == "PATCH":
+            response = requests.patch(url, headers=headers, json=json_data, params=params)
         
-        # First, check if there's ANY barcode for this email
-        existing_barcode = supabase.table("user_barcodes").select("*").eq("user_email", email).eq("status", "active").limit(1).execute()
+        print(f"DEBUG: {method} {url} - Status: {response.status_code}")
         
-        if existing_barcode.data:
-            barcode_record = existing_barcode.data[0]
-            print(f"DEBUG: Found existing barcode for {email}")
-            
-            # If barcode exists but has no user_id, link it to the user account
-            if barcode_record.get("user_id") is None:
-                user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
-                
-                if user_check.data:
-                    user_id = user_check.data[0]["id"]
-                    
-                    # Update the barcode to link it to the user account
-                    update_result = supabase.table("user_barcodes").update({
-                        "user_id": user_id,
-                        "updated_at": datetime.utcnow().isoformat()
-                    }).eq("id", barcode_record["id"]).execute()
-                    
-                    print(f"DEBUG: Linked existing barcode to user account for {email}")
-            
-            return barcode_record["barcode"]
+        if response.status_code >= 400:
+            print(f"ERROR: Supabase request failed: {response.status_code} - {response.text}")
+            raise Exception(f"Supabase request failed: {response.status_code} - {response.text}")
         
-        print(f"DEBUG: No existing barcode found, creating new one for {email}")
-        
-        # No barcode exists, create a new one
-        user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
-        
-        if not user_check.data:
-            print(f"DEBUG: No user found for email {email}")
-            return None
-        
-        user_id = user_check.data[0]["id"]
-        new_barcode = generate_user_barcode(email)
-        
-        barcode_data = {
-            "user_id": user_id,
-            "user_email": email,
-            "barcode": new_barcode,
-            "status": "active",
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }
-        
-        print(f"DEBUG: Attempting to insert barcode data: {barcode_data}")
-        
-        # Don't swallow errors - let them bubble up so we can see what's wrong
-        result = supabase.table("user_barcodes").insert(barcode_data).execute()
-        
-        if not result.data:
-            raise Exception("Insert returned no data - possible RLS issue")
-        
-        print(f"DEBUG: Successfully created barcode for {email}: {new_barcode}")
-        return new_barcode
+        return response.json()
         
     except Exception as e:
-        # Don't swallow the error - show exactly what went wrong
-        print(f"ERROR: Failed to ensure barcode for {email}: {str(e)}")
-        print(f"ERROR: Exception type: {type(e)}")
-        raise e  # Re-raise so we can see the actual error
+        print(f"ERROR: Exception in supabase_request: {str(e)}")
+        raise e
 
 if __name__ == "__main__":
     import uvicorn  
