@@ -1348,49 +1348,35 @@ async def ensure_user_barcode(email: str):
         print(f"Error ensuring user barcode for {email}: {e}")
         return None
 
-# Also add this new function to handle barcode creation for simple redemptions:
 
-async def ensure_barcode_for_email(email: str):
-    """Ensure an email has a barcode, create if missing (for simple redemptions without user accounts)"""
+
+async def ensure_user_barcode(email: str):
+    """Ensure user has a barcode, create if missing, link existing ones to user account"""
     try:
-        # Check if email already has a barcode (any barcode, regardless of user_id)
-        existing_barcode = supabase.table("user_barcodes").select("barcode").eq("user_email", email).eq("status", "active").limit(1).execute()
+        existing_barcode = supabase.table("user_barcodes").select("*").eq("user_email", email).eq("status", "active").limit(1).execute()
         
         if existing_barcode.data:
-            print(f"DEBUG: Barcode already exists for email {email}")
-            return existing_barcode.data[0]["barcode"]
+            barcode_record = existing_barcode.data[0]
+            
+            if barcode_record.get("user_id") is None:
+                user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
+                
+                if user_check.data:
+                    user_id = user_check.data[0]["id"]
+                    
+                    supabase.table("user_barcodes").update({
+                        "user_id": user_id,
+                        "updated_at": datetime.utcnow().isoformat()
+                    }).eq("id", barcode_record["id"]).execute()
+                    
+                    print(f"DEBUG: Linked existing barcode to user account for {email}")
+            
+            return barcode_record["barcode"]
         
-        # Generate new barcode for this email
-        new_barcode = generate_user_barcode(email)
-        
-        # Create barcode entry without user_id (since this is for simple redemption)
-        barcode_data = {
-            "user_id": None,  # No user account for simple redemptions
-            "user_email": email,
-            "barcode": new_barcode,
-            "status": "active",
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table("user_barcodes").insert(barcode_data).execute()
-        print(f"DEBUG: Created barcode for email {email}: {new_barcode}")
-        return new_barcode
-        
-    except Exception as e:
-        print(f"Error ensuring barcode for email {email}: {e}")
-        raise e    """Ensure user has a barcode, create if missing"""
-    try:
-        # Check if user already has a barcode
-        existing_barcode = supabase.table("user_barcodes").select("barcode").eq("user_email", email).eq("status", "active").limit(1).execute()
-        
-        if existing_barcode.data:
-            return existing_barcode.data[0]["barcode"]
-        
-        # Create new barcode if none exists
         user_check = supabase.table("users").select("id").eq("email", email).limit(1).execute()
         
         if not user_check.data:
+            print(f"DEBUG: No user found for email {email}")
             return None
         
         user_id = user_check.data[0]["id"]
@@ -1406,11 +1392,13 @@ async def ensure_barcode_for_email(email: str):
         }
         
         supabase.table("user_barcodes").insert(barcode_data).execute()
+        print(f"DEBUG: Created new barcode for {email}: {new_barcode}")
         return new_barcode
         
     except Exception as e:
-        print(f"Error ensuring user barcode: {e}")
+        print(f"Error ensuring user barcode for {email}: {e}")
         return None
+
 
 if __name__ == "__main__":
     import uvicorn  
