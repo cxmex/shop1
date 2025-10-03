@@ -1543,9 +1543,9 @@ async def search_cliente(cliente_name: str):
         return "Error searching cliente"
 
 async def search_estilo_id(estilo_name: str):
-    """Search for estilo in inventario_estilos and return id"""
+    """Search for estilo in inventario_estilos where prioridad=1 and return id"""
     try:
-        result = supabase.table("inventario_estilos").select("id, nombre").ilike("nombre", f"%{estilo_name}%").limit(1).execute()
+        result = supabase.table("inventario_estilos").select("id, nombre").ilike("nombre", f"%{estilo_name}%").eq("prioridad", 1).limit(1).execute()
         
         if result.data and len(result.data) > 0:
             return result.data[0]["id"], result.data[0]["nombre"]
@@ -1555,6 +1555,7 @@ async def search_estilo_id(estilo_name: str):
     except Exception as e:
         logger.error(f"Estilo search error: {e}")
         return None, None
+
 
 async def send_whatsapp_message(to_phone: str, message: str):
     """Send WhatsApp message"""
@@ -1668,12 +1669,14 @@ async def receive_whatsapp_webhook(request: Request):
                                         # Insert all items into ventas_travel2
                                         try:
                                             for item in session["items"]:
+                                                subtotal = int(item["qty"]) * int(item["precio"])
                                                 venta_data = {
                                                     "order_id": session["order_id"],
                                                     "qty": int(item["qty"]),
                                                     "estilo": item["estilo"],
                                                     "estilo_id": int(item["estilo_id"]),
                                                     "precio": int(item["precio"]),
+                                                    "subtotal": subtotal,
                                                     "cliente": session["cliente"],
                                                     "created_at": datetime.utcnow().isoformat()
                                                 }
@@ -1746,6 +1749,8 @@ async def receive_whatsapp_webhook(request: Request):
     except Exception as e:
         logger.error(f"Error processing WhatsApp webhook: {e}")
         return Response(status_code=500)
+
+
 
 if __name__ == "__main__":
     import uvicorn  
