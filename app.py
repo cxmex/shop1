@@ -1523,15 +1523,25 @@ async def receive_whatsapp_webhook(request: Request):
                             
                             logger.info(f"Message from {from_number}: {message_body}")
                             
-                            # TODO: Add your logic here
-                            # Example: search inventory, check rewards, etc.
+                            # Save to database
+                            try:
+                                message_data = {
+                                    "phone_number": from_number,
+                                    "message_id": message_id,
+                                    "message_body": message_body,
+                                    "received_at": datetime.utcnow().isoformat(),
+                                    "processed": False
+                                }
+                                supabase.table("whatsapp_messages").insert(message_data).execute()
+                                logger.info(f"✓ Message saved to DB: {message_id}")
+                            except Exception as db_error:
+                                logger.error(f"✗ DB save failed: {db_error}")
         
         return {"status": "ok"}
     
     except Exception as e:
         logger.error(f"Error processing WhatsApp webhook: {e}")
         return Response(status_code=500)
-
 
 
 if __name__ == "__main__":
