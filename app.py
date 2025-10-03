@@ -147,6 +147,8 @@ class BarcodeRedemptionResponse(BaseModel):
 
 
 user_sessions = {}
+order_sessions = {}
+
 
 
 
@@ -1541,6 +1543,20 @@ async def search_cliente(cliente_name: str):
         logger.error(f"Cliente search error: {e}")
         return "Error searching cliente"
 
+async def search_estilo_id(estilo_name: str):
+    """Search for estilo in inventario_estilos and return id"""
+    try:
+        result = supabase.table("inventario_estilos").select("id, nombre").ilike("nombre", f"%{estilo_name}%").limit(1).execute()
+        
+        if result.data and len(result.data) > 0:
+            return result.data[0]["id"], result.data[0]["nombre"]
+        else:
+            return None, None
+            
+    except Exception as e:
+        logger.error(f"Estilo search error: {e}")
+        return None, None
+
 
 @app.post("/webhook")
 async def receive_whatsapp_webhook(request: Request):
@@ -1580,16 +1596,94 @@ async def receive_whatsapp_webhook(request: Request):
                             
                             # Special commands only for phone 5215545174085
                             if from_number == "5215545174085":
-                                # Check for "hi to XXX" command
-                                if message_body.lower().startswith("hi to "):
-                                    # Extract the target identifier (e.g., "420")
-                                    target = message_body[6:].strip()
-                                    target_phone = f"525567717420"  # Build: 5215567717 + target
+                                message_lower = message_body.lower().strip()
+                                
+                                # Start new order
+                                if message_lower == "nota":
+                                    order_sessions[from_number] = {
+                                        "active": True,
+                                        "cliente": None,
+                                        "items": []
+                                    }
+                                    await send_whatsapp_message(from_number, "Nota iniciada. Envía el nombre del cliente.")
+                                
+                                # Set cliente for active order
+                                elif from_number in order_sessions and order_sessions[from_number]["active"] and order_sessions[from_number]["cliente"] is None:
+                                    order_sessions[from_number]["cliente"] = message_body.strip()
+                                    await send_whatsapp_message(from_number, f"Cliente: {message_body}\nEnvía productos en formato: QTY ESTILO PRECIO\nEjemplo: 5 IPHONE 11 500\nEscribe DONE para terminar.")
+                                
+                                # Process DONE command
+                                elif message_lower == "done" and from_number in order_sessions and order_sessions[from_number]["active"]:
+                                    session = order_sessions[from_number]
                                     
-                                    # Send message to target
-                                    await send_whatsapp_message(target_phone, f"hola {target}")
-                                    # Confirm to sender
-                                    await send_whatsapp_message(from_number, f"Message sent to {target}")
+                                    if not session["items"]:
+                                        await send_whatsapp_message(from_number, "No hay productos en la nota.")
+                                        del order_sessions[from_number]
+                                    else:
+                                        # Insert all items into ventas_travel2
+                                        try:
+                                            for item in session["items"]:
+                                                venta_data = {
+                                                    "qty": item["qty"],
+                                                    "estilo": item["estilo"],
+                                                    "estilo_id": item["estilo_id"],
+                                                    "precio": item["precio"],
+                                                    "cliente": session["cliente"],
+                                                    "created_at": datetime.utcnow().isoformat()
+                                                }
+                                                supabase.table("ventas_travel2").insert(venta_data).execute()
+                                            
+                                            summary = f"✓ Nota guardada para {session['cliente']}\n"
+                                            summary += f"Total productos: {len(session['items'])}\n"
+                                            for item in session["items"]:
+                                                summary += f"• {item['qty']} {item['estilo']} - ${item['precio']}\n"
+                                            
+                                            await send_whatsapp_message(from_number, summary)
+                                            del order_sessions[from_number]
+                                            
+                                        except Exception as e:
+                                            logger.error(f"Error saving nota: {e}")
+                                            await send_whatsapp_message(from_number, f"Error guardando nota: {str(e)}")
+                                
+                                # Parse product line: QTY ESTILO PRECIO
+                                elif from_number in order_sessions and order_sessions[from_number]["active"] and order_sessions[from_number]["cliente"]:
+                                    try:
+                                        parts = message_body.strip().split()
+                                        
+                                        if len(parts) >= 3:
+                                            qty = int(parts[0])
+                                            precio = float(parts[-1])
+                                            estilo_name = " ".join(parts[1:-1])
+                                            
+                                            # Search for estilo_id
+                                            estilo_id, found_estilo = await search_estilo_id(estilo_name)
+                                            
+                                            if estilo_id:
+                                                order_sessions[from_number]["items"].append({
+                                                    "qty": qty,
+                                                    "estilo": found_estilo,
+                                                    "estilo_id": estilo_id,
+                                                    "precio": precio
+                                                })
+                                                await send_whatsapp_message(from_number, f"✓ Agregado: {qty} {found_estilo} ${precio}\nTotal items: {len(order_sessions[from_number]['items'])}")
+                                            else:
+                                                await send_whatsapp_message(from_number, f"⚠ Estilo '{estilo_name}' no encontrado. Intenta de nuevo.")
+                                        else:
+                                            await send_whatsapp_message(from_number, "Formato incorrecto. Usa: QTY ESTILO PRECIO\nEjemplo: 5 IPHONE 11 500")
+                                            
+                                    except ValueError:
+                                        await send_whatsapp_message(from_number, "Error en formato. Usa: QTY ESTILO PRECIO")
+                                    except Exception as e:
+                                        logger.error(f"Error parsing product: {e}")
+                                        await send_whatsapp_message(from_number, f"Error: {str(e)}")
+                                
+                                # Check for "hi to XXX" command
+                                elif message_body.lower().startswith("hi to "):
+                                    target = message_body[6:].strip()
+                                    target_phone = f"525567717{target}"
+                                    result = await send_whatsapp_message(target_phone, f"hola {target}")
+                                    logger.info(f"WhatsApp API response: {result}")
+                                    await send_whatsapp_message(from_number, f"Message sent to {target_phone}")
                                 
                                 # Check for "cliente XXX" command
                                 elif message_body.lower().startswith("cliente "):
@@ -1611,27 +1705,6 @@ async def receive_whatsapp_webhook(request: Request):
     except Exception as e:
         logger.error(f"Error processing WhatsApp webhook: {e}")
         return Response(status_code=500)
-async def send_whatsapp_message(to_phone: str, message: str):
-    """Send WhatsApp message"""
-    url = "https://graph.facebook.com/v18.0/767235189812682/messages"
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}", 
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to_phone,
-        "type": "text",
-        "text": {"body": message}
-    }
-    
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        logger.info(f"Message sent to {to_phone}: {message}")
-        return response.json()
-    except Exception as e:
-        logger.error(f"Failed to send message: {e}")
-        return None
 
 
 if __name__ == "__main__":
