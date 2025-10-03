@@ -1478,7 +1478,7 @@ async def supabase_request(method: str, endpoint: str, params: dict = None, json
 
 
 WHATSAPP_VERIFY_TOKEN =  "mi_token_secreto_123"
-WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "") 
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
 
 # ============= ADD THESE TWO ENDPOINTS ANYWHERE IN YOUR FILE =============
 
@@ -1524,6 +1524,25 @@ async def search_inventory_by_modelo(modelo: str):
         logger.error(f"Search error: {e}")
         return "Error searching inventory"
 
+async def search_cliente(cliente_name: str):
+    """Search for a cliente in the clientes table"""
+    try:
+        cliente_name = cliente_name.strip()
+        
+        # Search in clientes table
+        result = supabase.table("clientes").select("cliente").ilike("cliente", f"%{cliente_name}%").execute()
+        
+        if result.data and len(result.data) > 0:
+            return "cliente found"
+        else:
+            return "cliente not found"
+            
+    except Exception as e:
+        logger.error(f"Cliente search error: {e}")
+        return "Error searching cliente"
+
+
+
 @app.post("/webhook")
 async def receive_whatsapp_webhook(request: Request):
     """Recibir eventos de WhatsApp"""
@@ -1560,16 +1579,22 @@ async def receive_whatsapp_webhook(request: Request):
                             except Exception as db_error:
                                 logger.error(f"✗ DB save failed: {db_error}")
                             
-                            # Search inventory and reply
-                            search_result = await search_inventory_by_modelo(message_body)
-                            await send_whatsapp_message(from_number, search_result)
+                            # Check if message is from special phone number and starts with "cliente"
+                            if from_number == "5215545174085" and message_body.lower().startswith("cliente "):
+                                # Extract cliente name (everything after "cliente ")
+                                cliente_name = message_body[8:].strip()  # Remove "cliente " prefix
+                                search_result = await search_cliente(cliente_name)
+                                await send_whatsapp_message(from_number, search_result)
+                            else:
+                                # Regular inventory search for all other messages
+                                search_result = await search_inventory_by_modelo(message_body)
+                                await send_whatsapp_message(from_number, search_result)
         
         return {"status": "ok"}
     
     except Exception as e:
         logger.error(f"Error processing WhatsApp webhook: {e}")
         return Response(status_code=500)
-
 
 async def send_whatsapp_message(to_phone: str, message: str):
     """Send WhatsApp message"""
