@@ -1578,7 +1578,6 @@ async def send_whatsapp_message(to_phone: str, message: str):
         logger.error(f"Failed to send message: {e}")
         return None
 
-
 @app.post("/webhook")
 async def receive_whatsapp_webhook(request: Request):
     """Recibir eventos de WhatsApp"""
@@ -1621,17 +1620,26 @@ async def receive_whatsapp_webhook(request: Request):
                                 
                                 # Start new order
                                 if message_lower == "nota":
+                                    # Get last order_id from ventas_travel2
+                                    try:
+                                        last_order = supabase.table("ventas_travel2").select("order_id").order("order_id", desc=True).limit(1).execute()
+                                        next_order_id = (last_order.data[0]["order_id"] + 1) if last_order.data and last_order.data[0]["order_id"] else 1
+                                    except:
+                                        next_order_id = 1
+                                    
                                     order_sessions[from_number] = {
                                         "active": True,
                                         "cliente": None,
-                                        "items": []
+                                        "items": [],
+                                        "order_id": next_order_id
                                     }
-                                    await send_whatsapp_message(from_number, "Nota iniciada. Envía el nombre del cliente.")
+                                    await send_whatsapp_message(from_number, f"Nota #{next_order_id} iniciada. Envía el nombre del cliente.")
                                 
-                                # Set cliente for active order
+                                # Set cliente for active order (don't look for "cliente" prefix)
                                 elif from_number in order_sessions and order_sessions[from_number]["active"] and order_sessions[from_number]["cliente"] is None:
+                                    # Don't check for "cliente" prefix - just use the message as-is
                                     order_sessions[from_number]["cliente"] = message_body.strip()
-                                    await send_whatsapp_message(from_number, f"Cliente: {message_body}\nEnvía productos en formato: QTY ESTILO PRECIO\nEjemplo: 5 IPHONE 11 500\nEscribe DONE para terminar.")
+                                    await send_whatsapp_message(from_number, f"Cliente: {message_body}\nEnvía productos en formato: QTY ESTILO PRECIO\nEjemplo: 5 ANILLO HUMO 2\nEscribe DONE para terminar.")
                                 
                                 # Process DONE command
                                 elif message_lower == "done" and from_number in order_sessions and order_sessions[from_number]["active"]:
@@ -1645,7 +1653,8 @@ async def receive_whatsapp_webhook(request: Request):
                                         try:
                                             for item in session["items"]:
                                                 venta_data = {
-                                                    "qty": item["qty"],
+                                                    "order_id": session["order_id"],
+                                                    "qty": int(item["qty"]),
                                                     "estilo": item["estilo"],
                                                     "estilo_id": int(item["estilo_id"]),
                                                     "precio": int(item["precio"]),
@@ -1654,7 +1663,8 @@ async def receive_whatsapp_webhook(request: Request):
                                                 }
                                                 supabase.table("ventas_travel2").insert(venta_data).execute()
                                             
-                                            summary = f"✓ Nota guardada para {session['cliente']}\n"
+                                            summary = f"✓ Nota #{session['order_id']} guardada\n"
+                                            summary += f"Cliente: {session['cliente']}\n"
                                             summary += f"Total productos: {len(session['items'])}\n"
                                             for item in session["items"]:
                                                 summary += f"• {item['qty']} {item['estilo']} - ${item['precio']}\n"
@@ -1690,7 +1700,7 @@ async def receive_whatsapp_webhook(request: Request):
                                             else:
                                                 await send_whatsapp_message(from_number, f"⚠ Estilo '{estilo_name}' no encontrado. Intenta de nuevo.")
                                         else:
-                                            await send_whatsapp_message(from_number, "Formato incorrecto. Usa: QTY ESTILO PRECIO\nEjemplo: 5 IPHONE 11 500")
+                                            await send_whatsapp_message(from_number, "Formato incorrecto. Usa: QTY ESTILO PRECIO\nEjemplo: 5 ANILLO HUMO 2")
                                             
                                     except ValueError:
                                         await send_whatsapp_message(from_number, "Error en formato. Usa: QTY ESTILO PRECIO")
@@ -1706,7 +1716,7 @@ async def receive_whatsapp_webhook(request: Request):
                                     logger.info(f"WhatsApp API response: {result}")
                                     await send_whatsapp_message(from_number, f"Message sent to {target_phone}")
                                 
-                                # Check for "cliente XXX" command
+                                # Check for "cliente XXX" command (search only)
                                 elif message_body.lower().startswith("cliente "):
                                     cliente_name = message_body[8:].strip()
                                     search_result = await search_cliente(cliente_name)
@@ -1726,7 +1736,7 @@ async def receive_whatsapp_webhook(request: Request):
     except Exception as e:
         logger.error(f"Error processing WhatsApp webhook: {e}")
         return Response(status_code=500)
-
+        
 
 if __name__ == "__main__":
     import uvicorn  
