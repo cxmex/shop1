@@ -1478,7 +1478,7 @@ async def supabase_request(method: str, endpoint: str, params: dict = None, json
 
 
 WHATSAPP_VERIFY_TOKEN =  "mi_token_secreto_123"
-WHATSAPP_ACCESS_TOKEN = "mi_token_secreto_123"
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "") 
 
 # ============= ADD THESE TWO ENDPOINTS ANYWHERE IN YOUR FILE =============
 
@@ -1575,7 +1575,7 @@ async def send_whatsapp_message(to_phone: str, message: str):
     """Send WhatsApp message"""
     url = "https://graph.facebook.com/v18.0/767235189812682/messages"
     headers = {
-        "Authorization": "Bearer EAAU0x2RoZB1IBPo3zw46IvsMykhGIkMKmWt9ceqYaZChslGBcv5b8rIGh9Xd5Y2S2xZAWbG6KR7DO4lmlHmwZAQaCdcv2A6sGDn73J3RsfLZCXvhWs92XBbmH1nspyKK227b8y7MPAIVTx711OAiTMhZC1o7VZCRKr8EPDX2hvuKsmKPrrO2RGQ4C5KOFA4Quu7yAZDZD",
+        "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}", 
         "Content-Type": "application/json"
     }
     payload = {
