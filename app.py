@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
@@ -20,7 +20,6 @@ from typing import Optional
 import hashlib
 from datetime import datetime, timedelta
 
-from fastapi.responses import PlainTextResponse
 import logging
 
 # Configure logging (add near the top after imports)
@@ -1556,6 +1555,28 @@ async def search_estilo_id(estilo_name: str):
     except Exception as e:
         logger.error(f"Estilo search error: {e}")
         return None, None
+
+async def send_whatsapp_message(to_phone: str, message: str):
+    """Send WhatsApp message"""
+    url = "https://graph.facebook.com/v18.0/767235189812682/messages"
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_phone,
+        "type": "text",
+        "text": {"body": message}
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        logger.info(f"Message sent to {to_phone}: {message}")
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to send message: {e}")
+        return None
 
 
 @app.post("/webhook")
