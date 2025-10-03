@@ -1647,8 +1647,8 @@ async def receive_whatsapp_webhook(request: Request):
                                                 venta_data = {
                                                     "qty": item["qty"],
                                                     "estilo": item["estilo"],
-                                                    "estilo_id": item["estilo_id"],
-                                                    "precio": item["precio"],
+                                                    "estilo_id": int(item["estilo_id"]),
+                                                    "precio": int(item["precio"]),
                                                     "cliente": session["cliente"],
                                                     "created_at": datetime.utcnow().isoformat()
                                                 }
@@ -1673,7 +1673,7 @@ async def receive_whatsapp_webhook(request: Request):
                                         
                                         if len(parts) >= 3:
                                             qty = int(parts[0])
-                                            precio = float(parts[-1])
+                                            precio = int(float(parts[-1]))
                                             estilo_name = " ".join(parts[1:-1])
                                             
                                             # Search for estilo_id
