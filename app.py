@@ -1575,7 +1575,7 @@ async def send_whatsapp_message(to_phone: str, message: str):
     """Send WhatsApp message"""
     url = "https://graph.facebook.com/v18.0/767235189812682/messages"
     headers = {
-        "Authorization": "Bearer EAAU0x2RoZB1IBPlZBxBowtTZCQkr2ZC1BrJwYPZBhrlEgSY8vOVyZCJHd4uk7QNVFyLWxmYLwkDo2dvDVUGr0KzhF0j8mdf4Owd1D9KH6HzDyQFWjEZC75aTZCBMHoxl4MYs83JIeqpobJtpZCQSn6CAKZCWmZCNy3leJtgWSwdfbYCZAHj9APnH8x1H9IxO4qLUBXonaUdfMDsVzzHZBXahQQl7kfZAD6y1yVq7dqqwnvrfZCcRtR1YAZDZD",
+        "Authorization": "Bearer EAAU0x2RoZB1IBPo3zw46IvsMykhGIkMKmWt9ceqYaZChslGBcv5b8rIGh9Xd5Y2S2xZAWbG6KR7DO4lmlHmwZAQaCdcv2A6sGDn73J3RsfLZCXvhWs92XBbmH1nspyKK227b8y7MPAIVTx711OAiTMhZC1o7VZCRKr8EPDX2hvuKsmKPrrO2RGQ4C5KOFA4Quu7yAZDZD",
         "Content-Type": "application/json"
     }
     payload = {
