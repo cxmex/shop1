@@ -1501,26 +1501,28 @@ async def verify_whatsapp_webhook(request: Request):
 
 
 async def search_inventory_by_modelo(modelo: str):
-    """Search inventory by modelo and return results"""
+    """Search inventory by modelo and return available products"""
     try:
-        # Search in inventario_modelos table
-        result = supabase.table("inventario_modelos").select("id, modelo").ilike("modelo", f"%{modelo}%").execute()
+        # Clean up the search term
+        modelo = modelo.strip().upper()
+        
+        # Search in inventario1 table
+        result = supabase.table("inventario1").select("name, terex1").eq("modelo", modelo).gt("terex1", 1).execute()
         
         if result.data and len(result.data) > 0:
-            # Found match(es)
-            if len(result.data) == 1:
-                return f"Found: ID {result.data[0]['id']}"
-            else:
-                # Multiple matches
-                ids = [str(item['id']) for item in result.data]
-                return f"Found multiple: IDs {', '.join(ids)}"
+            # Format the response
+            response_lines = [f"Found {len(result.data)} products for {modelo}:\n"]
+            
+            for item in result.data:
+                response_lines.append(f"• {item['name']} - Stock: {item['terex1']}")
+            
+            return "\n".join(response_lines)
         else:
             return "not found"
             
     except Exception as e:
         logger.error(f"Search error: {e}")
         return "Error searching inventory"
-
 
 @app.post("/webhook")
 async def receive_whatsapp_webhook(request: Request):
