@@ -1500,6 +1500,28 @@ async def verify_whatsapp_webhook(request: Request):
     return Response(status_code=403)
 
 
+async def search_inventory_by_modelo(modelo: str):
+    """Search inventory by modelo and return results"""
+    try:
+        # Search in inventario_modelos table
+        result = supabase.table("inventario_modelos").select("id, modelo").ilike("modelo", f"%{modelo}%").execute()
+        
+        if result.data and len(result.data) > 0:
+            # Found match(es)
+            if len(result.data) == 1:
+                return f"Found: ID {result.data[0]['id']}"
+            else:
+                # Multiple matches
+                ids = [str(item['id']) for item in result.data]
+                return f"Found multiple: IDs {', '.join(ids)}"
+        else:
+            return "not found"
+            
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        return "Error searching inventory"
+
+
 @app.post("/webhook")
 async def receive_whatsapp_webhook(request: Request):
     """Recibir eventos de WhatsApp"""
@@ -1508,7 +1530,6 @@ async def receive_whatsapp_webhook(request: Request):
         body = await request.json()
         logger.info(f"WhatsApp webhook event received: {body}")
         
-        # Process WhatsApp messages
         if body.get("object") == "whatsapp_business_account":
             for entry in body.get("entry", []):
                 for change in entry.get("changes", []):
@@ -1536,12 +1557,39 @@ async def receive_whatsapp_webhook(request: Request):
                                 logger.info(f"✓ Message saved to DB: {message_id}")
                             except Exception as db_error:
                                 logger.error(f"✗ DB save failed: {db_error}")
+                            
+                            # Search inventory and reply
+                            search_result = await search_inventory_by_modelo(message_body)
+                            await send_whatsapp_message(from_number, search_result)
         
         return {"status": "ok"}
     
     except Exception as e:
         logger.error(f"Error processing WhatsApp webhook: {e}")
         return Response(status_code=500)
+
+
+async def send_whatsapp_message(to_phone: str, message: str):
+    """Send WhatsApp message"""
+    url = "https://graph.facebook.com/v18.0/767235189812682/messages"
+    headers = {
+        "Authorization": "Bearer EAAU0x2RoZB1IBPlZBxBowtTZCQkr2ZC1BrJwYPZBhrlEgSY8vOVyZCJHd4uk7QNVFyLWxmYLwkDo2dvDVUGr0KzhF0j8mdf4Owd1D9KH6HzDyQFWjEZC75aTZCBMHoxl4MYs83JIeqpobJtpZCQSn6CAKZCWmZCNy3leJtgWSwdfbYCZAHj9APnH8x1H9IxO4qLUBXonaUdfMDsVzzHZBXahQQl7kfZAD6y1yVq7dqqwnvrfZCcRtR1YAZDZD",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_phone,
+        "type": "text",
+        "text": {"body": message}
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        logger.info(f"Message sent to {to_phone}: {message}")
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to send message: {e}")
+        return None
 
 
 if __name__ == "__main__":
