@@ -20,7 +20,12 @@ from typing import Optional
 import hashlib
 from datetime import datetime, timedelta
 
+from fastapi.responses import PlainTextResponse
+import logging
 
+# Configure logging (add near the top after imports)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 
@@ -1466,6 +1471,68 @@ async def supabase_request(method: str, endpoint: str, params: dict = None, json
     except Exception as e:
         print(f"ERROR: Exception in supabase_request: {str(e)}")
         raise e
+
+
+
+
+
+
+WHATSAPP_VERIFY_TOKEN =  "mi_token_secreto_123"
+WHATSAPP_ACCESS_TOKEN = "mi_token_secreto_123"
+
+# ============= ADD THESE TWO ENDPOINTS ANYWHERE IN YOUR FILE =============
+
+@app.get("/webhook")
+async def verify_whatsapp_webhook(request: Request):
+    """Verificación del webhook de WhatsApp/Meta"""
+    
+    mode = request.query_params.get("hub.mode")
+    token = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge")
+    
+    logger.info(f"WhatsApp verification - Mode: {mode}, Token: {token}, Challenge: {challenge}")
+    
+    if mode == "subscribe" and token == WHATSAPP_VERIFY_TOKEN:
+        logger.info("✓ WhatsApp webhook verified successfully")
+        return PlainTextResponse(content=challenge, status_code=200)
+    
+    logger.warning("✗ WhatsApp webhook verification failed")
+    return Response(status_code=403)
+
+
+@app.post("/webhook")
+async def receive_whatsapp_webhook(request: Request):
+    """Recibir eventos de WhatsApp"""
+    
+    try:
+        body = await request.json()
+        logger.info(f"WhatsApp webhook event received: {body}")
+        
+        # Process WhatsApp messages
+        if body.get("object") == "whatsapp_business_account":
+            for entry in body.get("entry", []):
+                for change in entry.get("changes", []):
+                    if change.get("field") == "messages":
+                        value = change.get("value", {})
+                        
+                        messages = value.get("messages", [])
+                        for message in messages:
+                            from_number = message.get("from")
+                            message_body = message.get("text", {}).get("body", "")
+                            message_id = message.get("id")
+                            
+                            logger.info(f"Message from {from_number}: {message_body}")
+                            
+                            # TODO: Add your logic here
+                            # Example: search inventory, check rewards, etc.
+        
+        return {"status": "ok"}
+    
+    except Exception as e:
+        logger.error(f"Error processing WhatsApp webhook: {e}")
+        return Response(status_code=500)
+
+
 
 if __name__ == "__main__":
     import uvicorn  
