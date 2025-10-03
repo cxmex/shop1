@@ -1584,7 +1584,7 @@ async def receive_whatsapp_webhook(request: Request):
                                 if message_body.lower().startswith("hi to "):
                                     # Extract the target identifier (e.g., "420")
                                     target = message_body[6:].strip()
-                                    target_phone = f"52155677174{target}"  # Build: 5215567717 + target
+                                    target_phone = f"525567717420"  # Build: 5215567717 + target
                                     
                                     # Send message to target
                                     await send_whatsapp_message(target_phone, f"hola {target}")
