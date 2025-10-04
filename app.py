@@ -1605,13 +1605,14 @@ async def send_whatsapp_image(to_phone: str, image_url: str, caption: str = ""):
         logger.error(f"Failed to send image: {e}")
         return None
 
+
 async def search_product_image(modelo: str):
-    """Search for product images by modelo - shows all products with images and stock"""
+    """Search for product images by modelo - shows only products with stock > 0"""
     try:
         modelo = modelo.strip().upper()
         
-        # Get ALL products with this modelo, including stock quantity
-        result = supabase.table("inventario1").select("estilo_id, color_id, estilo, name, terex1").eq("modelo", modelo).execute()
+        # Get ALL products with this modelo where stock > 0
+        result = supabase.table("inventario1").select("estilo_id, color_id, estilo, name, terex1").eq("modelo", modelo).gt("terex1", 0).execute()
         
         if result.data and len(result.data) > 0:
             images_found = []
@@ -1848,7 +1849,7 @@ async def receive_whatsapp_webhook(request: Request):
     except Exception as e:
         logger.error(f"Error processing WhatsApp webhook: {e}")
         return Response(status_code=500)
-        
+
 if __name__ == "__main__":
     import uvicorn  
     uvicorn.run(app, host="0.0.0.0", port=8000)
