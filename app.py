@@ -1580,6 +1580,32 @@ async def send_whatsapp_message(to_phone: str, message: str):
         return None
 
 
+async def send_whatsapp_image(to_phone: str, image_url: str, caption: str = ""):
+    """Send WhatsApp image from URL"""
+    url = "https://graph.facebook.com/v18.0/767235189812682/messages"
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_phone,
+        "type": "image",
+        "image": {
+            "link": image_url,
+            "caption": caption
+        }
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        logger.info(f"Image sent to {to_phone}: {image_url}")
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to send image: {e}")
+        return None
+
+
 @app.post("/webhook")
 async def receive_whatsapp_webhook(request: Request):
     """Recibir eventos de WhatsApp"""
@@ -1649,6 +1675,11 @@ async def receive_whatsapp_webhook(request: Request):
                                     cliente_name = message_body[8:].strip()
                                     search_result = await search_cliente(cliente_name)
                                     await send_whatsapp_message(from_number, search_result)
+                                
+                                # Test command to send image
+                                elif message_lower == "test1":
+                                    image_url = "https://gbkhkbfbarsnpbdkxzii.supabase.co/storage/v1/object/public/image-fundas/webp/image_1741799947505.webp"
+                                    await send_whatsapp_image(from_number, image_url, "Test image")
                                 
                                 # Set cliente for active order (only if NOT a "cliente" command)
                                 elif (from_number in order_sessions and 
