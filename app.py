@@ -1678,7 +1678,7 @@ async def receive_whatsapp_webhook(request: Request):
                                 
                                 # Test command to send image
                                 elif message_lower == "test1":
-                                    image_url = "https://petapixel.com/assets/uploads/2022/06/what-is-a-jpeg-featured.jpg"
+                                    image_url = "https://gator3093.hostgator.com:2083/cpsess6246031682/frontend/jupiter/filemanager/showfile.html?file=screenshot_2025-08-11_13-06-43.png&fileop=&dir=%2Fhome2%2Ffundaock%2Ffunda-stock.com&dirop=&charset=&file_charset=&baseurl=&basedir="
                                     await send_whatsapp_image(from_number, image_url, "Test image")
                                 
                                 # Set cliente for active order (only if NOT a "cliente" command)
