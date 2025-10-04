@@ -1678,7 +1678,7 @@ async def receive_whatsapp_webhook(request: Request):
                                 
                                 # Test command to send image
                                 elif message_lower == "test1":
-                                    image_url = "https://gbkhkbfbarsnpbdkxzii.supabase.co/storage/v1/object/public/image-fundas/estilo_127/color_10/image_1753739669_6887f195a28ca.jpg"
+                                    image_url = "https://gbkhkbfbarsnpbdkxzii.supabase.co/storage/v1/object/public/image-fundas/compressed/scaled_1000002217_less100.jpg?"
                                     await send_whatsapp_image(from_number, image_url, "Test image")
                                 
                                 # Set cliente for active order (only if NOT a "cliente" command)
