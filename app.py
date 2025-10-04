@@ -1607,32 +1607,49 @@ async def send_whatsapp_image(to_phone: str, image_url: str, caption: str = ""):
 
 
 async def search_product_image(modelo: str):
-    """Search for product image by modelo"""
+    """Search for product images by modelo - shows all products with images"""
     try:
         modelo = modelo.strip().upper()
         
-        # Get estilo_id and color_id from inventario1
-        result = supabase.table("inventario1").select("estilo_id, color_id, estilo").eq("modelo", modelo).limit(1).execute()
+        # Get ALL products with this modelo (not just first one)
+        result = supabase.table("inventario1").select("estilo_id, color_id, estilo, name").eq("modelo", modelo).execute()
         
         if result.data and len(result.data) > 0:
-            estilo_id = result.data[0].get("estilo_id")
-            color_id = result.data[0].get("color_id")
-            estilo = result.data[0].get("estilo")
+            images_found = []
             
-            if estilo_id and color_id:
-                # Get image from image_uploads
-                image_result = supabase.table("image_uploads").select("lessthan100").eq("estilo_id", estilo_id).eq("color_id", color_id).limit(1).execute()
+            for product in result.data:
+                estilo_id = product.get("estilo_id")
+                color_id = product.get("color_id")
+                estilo = product.get("estilo")
+                name = product.get("name")
                 
-                if image_result.data and len(image_result.data) > 0:
-                    image_url = image_result.data[0].get("lessthan100")
-                    if image_url:
-                        return image_url, estilo
+                if estilo_id and color_id:
+                    # Try to find image for this product
+                    image_result = supabase.table("image_uploads").select("lessthan100, public_url_webp").eq("estilo_id", estilo_id).eq("color_id", color_id).limit(1).execute()
+                    
+                    if image_result.data and len(image_result.data) > 0:
+                        # Try lessthan100 first, fallback to public_url_webp
+                        image_url = image_result.data[0].get("lessthan100") or image_result.data[0].get("public_url_webp")
+                        
+                        if image_url:
+                            images_found.append({
+                                "url": image_url,
+                                "caption": name or estilo
+                            })
+                        else:
+                            # No image found, add text entry
+                            images_found.append({
+                                "url": None,
+                                "caption": name or estilo
+                            })
+            
+            return images_found if images_found else None
         
-        return None, None
+        return None
             
     except Exception as e:
         logger.error(f"Image search error: {e}")
-        return None, None
+        return None
 
 
 @app.post("/webhook")
@@ -1705,15 +1722,19 @@ async def receive_whatsapp_webhook(request: Request):
                                     search_result = await search_cliente(cliente_name)
                                     await send_whatsapp_message(from_number, search_result)
                                 
-                                # Check for "ver XXX" command to show product image
+                                # Check for "ver XXX" command to show product images
                                 elif message_lower.startswith("ver "):
                                     modelo = message_body[4:].strip()
-                                    image_url, estilo = await search_product_image(modelo)
+                                    images = await search_product_image(modelo)
                                     
-                                    if image_url and estilo:
-                                        await send_whatsapp_image(from_number, image_url, estilo)
+                                    if images:
+                                        for item in images:
+                                            if item["url"]:
+                                                await send_whatsapp_image(from_number, item["url"], item["caption"])
+                                            else:
+                                                await send_whatsapp_message(from_number, item["caption"])
                                     else:
-                                        await send_whatsapp_message(from_number, f"No se encontró imagen para {modelo}")
+                                        await send_whatsapp_message(from_number, f"No se encontraron productos para {modelo}")
                                 
                                 # Test command to send image
                                 elif message_lower == "test1":
