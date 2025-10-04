@@ -1606,6 +1606,35 @@ async def send_whatsapp_image(to_phone: str, image_url: str, caption: str = ""):
         return None
 
 
+async def search_product_image(modelo: str):
+    """Search for product image by modelo"""
+    try:
+        modelo = modelo.strip().upper()
+        
+        # Get estilo_id and color_id from inventario1
+        result = supabase.table("inventario1").select("estilo_id, color_id, estilo").eq("modelo", modelo).limit(1).execute()
+        
+        if result.data and len(result.data) > 0:
+            estilo_id = result.data[0].get("estilo_id")
+            color_id = result.data[0].get("color_id")
+            estilo = result.data[0].get("estilo")
+            
+            if estilo_id and color_id:
+                # Get image from image_uploads
+                image_result = supabase.table("image_uploads").select("lessthan100").eq("estilo_id", estilo_id).eq("color_id", color_id).limit(1).execute()
+                
+                if image_result.data and len(image_result.data) > 0:
+                    image_url = image_result.data[0].get("lessthan100")
+                    if image_url:
+                        return image_url, estilo
+        
+        return None, None
+            
+    except Exception as e:
+        logger.error(f"Image search error: {e}")
+        return None, None
+
+
 @app.post("/webhook")
 async def receive_whatsapp_webhook(request: Request):
     """Recibir eventos de WhatsApp"""
@@ -1676,9 +1705,19 @@ async def receive_whatsapp_webhook(request: Request):
                                     search_result = await search_cliente(cliente_name)
                                     await send_whatsapp_message(from_number, search_result)
                                 
+                                # Check for "ver XXX" command to show product image
+                                elif message_lower.startswith("ver "):
+                                    modelo = message_body[4:].strip()
+                                    image_url, estilo = await search_product_image(modelo)
+                                    
+                                    if image_url and estilo:
+                                        await send_whatsapp_image(from_number, image_url, estilo)
+                                    else:
+                                        await send_whatsapp_message(from_number, f"No se encontró imagen para {modelo}")
+                                
                                 # Test command to send image
                                 elif message_lower == "test1":
-                                    image_url = "https://gbkhkbfbarsnpbdkxzii.supabase.co/storage/v1/object/public/image-fundas/compressed/scaled_1000002116_less100.jpg?"
+                                    image_url = "https://picsum.photos/400/300.jpg"
                                     await send_whatsapp_image(from_number, image_url, "Test image")
                                 
                                 # Set cliente for active order (only if NOT a "cliente" command)
@@ -1780,8 +1819,6 @@ async def receive_whatsapp_webhook(request: Request):
     except Exception as e:
         logger.error(f"Error processing WhatsApp webhook: {e}")
         return Response(status_code=500)
-
-
 
 if __name__ == "__main__":
     import uvicorn  
