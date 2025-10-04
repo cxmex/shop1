@@ -1605,14 +1605,13 @@ async def send_whatsapp_image(to_phone: str, image_url: str, caption: str = ""):
         logger.error(f"Failed to send image: {e}")
         return None
 
-
 async def search_product_image(modelo: str):
-    """Search for product images by modelo - shows all products with images"""
+    """Search for product images by modelo - shows all products with images and stock"""
     try:
         modelo = modelo.strip().upper()
         
-        # Get ALL products with this modelo (not just first one)
-        result = supabase.table("inventario1").select("estilo_id, color_id, estilo, name").eq("modelo", modelo).execute()
+        # Get ALL products with this modelo, including stock quantity
+        result = supabase.table("inventario1").select("estilo_id, color_id, estilo, name, terex1").eq("modelo", modelo).execute()
         
         if result.data and len(result.data) > 0:
             images_found = []
@@ -1622,26 +1621,35 @@ async def search_product_image(modelo: str):
                 color_id = product.get("color_id")
                 estilo = product.get("estilo")
                 name = product.get("name")
+                stock = product.get("terex1", 0)
                 
                 if estilo_id and color_id:
-                    # Try to find image for this product
-                    image_result = supabase.table("image_uploads").select("lessthan100, public_url_webp").eq("estilo_id", estilo_id).eq("color_id", color_id).limit(1).execute()
+                    # Try to find image for this product using lessthan50url
+                    image_result = supabase.table("image_uploads").select("lessthan50url").eq("estilo_id", estilo_id).eq("color_id", color_id).limit(1).execute()
                     
                     if image_result.data and len(image_result.data) > 0:
-                        # Try lessthan100 first, fallback to public_url_webp
-                        image_url = image_result.data[0].get("lessthan100") or image_result.data[0].get("public_url_webp")
+                        image_url = image_result.data[0].get("lessthan50url")
                         
                         if image_url:
+                            caption = f"{name or estilo} - Stock: {stock}"
                             images_found.append({
                                 "url": image_url,
-                                "caption": name or estilo
+                                "caption": caption
                             })
                         else:
-                            # No image found, add text entry
+                            # No image found, add text entry with stock
+                            caption = f"{name or estilo} - Stock: {stock}"
                             images_found.append({
                                 "url": None,
-                                "caption": name or estilo
+                                "caption": caption
                             })
+                    else:
+                        # No image record, add text entry with stock
+                        caption = f"{name or estilo} - Stock: {stock}"
+                        images_found.append({
+                            "url": None,
+                            "caption": caption
+                        })
             
             return images_found if images_found else None
         
@@ -1840,7 +1848,7 @@ async def receive_whatsapp_webhook(request: Request):
     except Exception as e:
         logger.error(f"Error processing WhatsApp webhook: {e}")
         return Response(status_code=500)
-
+        
 if __name__ == "__main__":
     import uvicorn  
     uvicorn.run(app, host="0.0.0.0", port=8000)
